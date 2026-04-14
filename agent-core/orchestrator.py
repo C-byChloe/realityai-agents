@@ -7,6 +7,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from langgraph.graph import END, StateGraph
 
 from agents.action_agent import run_action_agent
+from agents.query_agent import run_query_agent
 from state import AgentState, SafetyResult
 
 # ---------------------------------------------------------------------------
@@ -102,9 +103,13 @@ async def execute_agent(state: AgentState) -> dict:
     """Execute the selected agent. Routes to real agent or placeholder."""
     agent = state.get("selected_agent", "unknown")
 
+    llm = _get_llm()
+
     if agent == "action_agent":
-        llm = _get_llm()
         return await run_action_agent(state, llm)
+
+    if agent == "query_agent":
+        return await run_query_agent(state, llm)
 
     # Placeholder for agents not yet implemented
     user_msg = state["messages"][-1].content if state.get("messages") else ""

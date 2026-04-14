@@ -24,16 +24,16 @@
 - [x] 3.3 Implement mock tool functions (print operation details + return success)
 - [x] 3.4 Wire Action Agent into state machine routing
 - [x] 3.5 Add unit tests for Action Agent tool selection and response format
-- [ ] 3.6 PR: `gh pr create --base main --title "feat(agent-core): add Action Agent with mock tools"`
+- [x] 3.6 PR: `gh pr create --base main --title "feat(agent-core): add Action Agent with mock tools"`
 
 ## 4. Query Agent
 
-- [ ] 4.1 Write Query Agent system prompt with identity and retrieval instructions
-- [ ] 4.2 Define tool schemas: course_lookup, schedule_query, syllabus_retrieve
-- [ ] 4.3 Set up basic ChromaDB instance with document ingestion script
-- [ ] 4.4 Implement simple vector retrieval for Query Agent
-- [ ] 4.5 Wire Query Agent into state machine routing
-- [ ] 4.6 Add unit tests for Query Agent retrieval and response format
+- [x] 4.1 Write Query Agent system prompt with identity and retrieval instructions
+- [x] 4.2 Define tool schemas: course_lookup, schedule_query, syllabus_retrieve
+- [x] 4.3 Set up basic ChromaDB instance with document ingestion script
+- [x] 4.4 Implement simple vector retrieval for Query Agent
+- [x] 4.5 Wire Query Agent into state machine routing
+- [x] 4.6 Add unit tests for Query Agent retrieval and response format
 - [ ] 4.7 PR: `gh pr create --base main --title "feat(agent-core): add Query Agent with basic ChromaDB retrieval"`
 
 ## 5. Planning Agent
