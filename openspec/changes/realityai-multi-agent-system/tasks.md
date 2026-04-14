@@ -43,13 +43,13 @@
 - [x] 5.3 Enable Planning Agent to invoke Action/Query agent tools for sub-step execution
 - [x] 5.4 Wire Planning Agent into state machine routing
 - [x] 5.5 Add unit tests for task decomposition and multi-step execution
-- [ ] 5.6 PR: `gh pr create --base main --title "feat(agent-core): add Planning Agent with task decomposition"`
+- [x] 5.6 PR: `gh pr create --base main --title "feat(agent-core): add Planning Agent with task decomposition"`
 
 ## 6. CLI Test Harness
 
-- [ ] 6.1 Build CLI entry point: `python cli.py "query"` with conversation loop
-- [ ] 6.2 Add formatted output showing selected agent, tools called, and response
-- [ ] 6.3 Verify end-to-end routing: query → Query Agent, action → Action Agent, planning → Planning Agent
+- [x] 6.1 Build CLI entry point: `python cli.py "query"` with conversation loop
+- [x] 6.2 Add formatted output showing selected agent, tools called, and response
+- [x] 6.3 Verify end-to-end routing: query → Query Agent, action → Action Agent, planning → Planning Agent
 - [ ] 6.4 PR: `gh pr create --base main --title "feat(agent-core): add CLI test harness for manual testing"`
 - [ ] 6.5 **Phase 1 milestone**: `git tag v0.1.0-agent-core && git push origin v0.1.0-agent-core`
 
