@@ -34,15 +34,15 @@
 - [x] 4.4 Implement simple vector retrieval for Query Agent
 - [x] 4.5 Wire Query Agent into state machine routing
 - [x] 4.6 Add unit tests for Query Agent retrieval and response format
-- [ ] 4.7 PR: `gh pr create --base main --title "feat(agent-core): add Query Agent with basic ChromaDB retrieval"`
+- [x] 4.7 PR: `gh pr create --base main --title "feat(agent-core): add Query Agent with basic ChromaDB retrieval"`
 
 ## 5. Planning Agent
 
-- [ ] 5.1 Write Planning Agent system prompt with chain-of-thought decomposition and few-shot examples
-- [ ] 5.2 Implement task decomposition logic that breaks complex requests into sub-steps
-- [ ] 5.3 Enable Planning Agent to invoke Action/Query agent tools for sub-step execution
-- [ ] 5.4 Wire Planning Agent into state machine routing
-- [ ] 5.5 Add unit tests for task decomposition and multi-step execution
+- [x] 5.1 Write Planning Agent system prompt with chain-of-thought decomposition and few-shot examples
+- [x] 5.2 Implement task decomposition logic that breaks complex requests into sub-steps
+- [x] 5.3 Enable Planning Agent to invoke Action/Query agent tools for sub-step execution
+- [x] 5.4 Wire Planning Agent into state machine routing
+- [x] 5.5 Add unit tests for task decomposition and multi-step execution
 - [ ] 5.6 PR: `gh pr create --base main --title "feat(agent-core): add Planning Agent with task decomposition"`
 
 ## 6. CLI Test Harness

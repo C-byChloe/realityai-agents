@@ -148,14 +148,31 @@ class TestSafetyCheck:
 
 
 class TestExecuteAgent:
-    """Tests for the placeholder execution node."""
+    """Tests for agent execution routing."""
 
-    async def test_echoes_agent_and_message(self):
-        state = _make_state("hello", selected_agent="query_agent")
-        result = await execute_agent(state)
-        assert "query_agent" in result["response"]
+    async def test_routes_unknown_agent_to_placeholder(self):
+        state = _make_state("hello", selected_agent="unknown_agent")
+
+        with patch("orchestrator._get_llm", return_value=_mock_llm_response("{}")):
+            result = await execute_agent(state)
+
+        assert "unknown_agent" in result["response"]
         assert "hello" in result["response"]
         assert result["tool_calls"] == []
+
+    async def test_routes_query_agent(self):
+        query_response = json.dumps({
+            "tool": "course_lookup",
+            "arguments": {"course_id": "CS101"},
+            "query_type": "deterministic",
+        })
+        state = _make_state("Tell me about CS101", selected_agent="query_agent")
+
+        with patch("orchestrator._get_llm", return_value=_mock_llm_response(query_response)):
+            result = await execute_agent(state)
+
+        assert len(result["tool_calls"]) == 1
+        assert result["tool_calls"][0].tool_name == "course_lookup"
 
 
 # ---------------------------------------------------------------------------
@@ -231,9 +248,21 @@ class TestBuildGraph:
 
     async def test_full_graph_execution(self):
         """End-to-end test: a query message flows through all nodes."""
-        llm_response = json.dumps({"intent": "query", "confidence": 0.9})
+        intent_response = json.dumps({"intent": "query", "confidence": 0.9})
+        query_response = json.dumps({
+            "tool": "schedule_query",
+            "arguments": {"course_id": "CS101"},
+            "query_type": "deterministic",
+        })
 
-        with patch("orchestrator._get_llm", return_value=_mock_llm_response(llm_response)):
+        # Mock LLM returns intent classification first, then query agent response
+        mock_llm = AsyncMock()
+        mock_llm.ainvoke.side_effect = [
+            AIMessage(content=intent_response),
+            AIMessage(content=query_response),
+        ]
+
+        with patch("orchestrator._get_llm", return_value=mock_llm):
             app = create_app()
             result = await app.ainvoke(
                 _make_state("What time does CS101 meet?"),
@@ -242,4 +271,4 @@ class TestBuildGraph:
         assert result["intent"] == "query"
         assert result["selected_agent"] == "query_agent"
         assert result["safety_result"].flagged is False
-        assert "query_agent" in result["response"]
+        assert "Mon/Wed/Fri" in result["response"]
