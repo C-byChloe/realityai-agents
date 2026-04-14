@@ -15,15 +15,15 @@
 - [x] 2.3 Build LLM-based intent classifier that routes to action/query/planning agents
 - [x] 2.4 Wire conditional routing edges based on intent classification result
 - [x] 2.5 Add unit tests for intent classification across action/query/planning scenarios
-- [ ] 2.6 PR: `git checkout -b feat/p1-langgraph-state-machine` → commit → push → `gh pr create --base main --title "feat(agent-core): implement LangGraph state machine with intent router"`
+- [x] 2.6 PR: `git checkout -b feat/p1-langgraph-state-machine` → commit → push → `gh pr create --base main --title "feat(agent-core): implement LangGraph state machine with intent router"`
 
 ## 3. Action Agent
 
-- [ ] 3.1 Write Action Agent system prompt with identity, behavioral constraints, and output format
-- [ ] 3.2 Define tool schemas: grade_update, enrollment_modify, assignment_create
-- [ ] 3.3 Implement mock tool functions (print operation details + return success)
-- [ ] 3.4 Wire Action Agent into state machine routing
-- [ ] 3.5 Add unit tests for Action Agent tool selection and response format
+- [x] 3.1 Write Action Agent system prompt with identity, behavioral constraints, and output format
+- [x] 3.2 Define tool schemas: grade_update, enrollment_modify, assignment_create
+- [x] 3.3 Implement mock tool functions (print operation details + return success)
+- [x] 3.4 Wire Action Agent into state machine routing
+- [x] 3.5 Add unit tests for Action Agent tool selection and response format
 - [ ] 3.6 PR: `gh pr create --base main --title "feat(agent-core): add Action Agent with mock tools"`
 
 ## 4. Query Agent
