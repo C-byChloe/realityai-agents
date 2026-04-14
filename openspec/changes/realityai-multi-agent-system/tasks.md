@@ -6,15 +6,15 @@
 - [x] 1.4 Create docker-compose.yml placeholder with PostgreSQL, ChromaDB, Redis services
 - [x] 1.5 Create README.md stub with project overview
 - [x] 1.6 Verify SSH remote is set to git@github.com:CbyChloe/realityai-agents.git
-- [ ] 1.7 Create PR via `gh pr create --base main --title "chore(project): initialize repo structure and dependencies"` with ## What/Why/How/Testing sections
+- [x] 1.7 Create PR via `gh pr create --base main --title "chore(project): initialize repo structure and dependencies"` with ## What/Why/How/Testing sections
 
 ## 2. LangGraph State Machine & Intent Router
 
-- [ ] 2.1 Define AgentState TypedDict with fields: intent, selected_agent, safety_result, tool_calls, response, conversation_history
-- [ ] 2.2 Implement LangGraph state machine with nodes: intent_classification → agent_routing → safety_check → execution → response_generation
-- [ ] 2.3 Build LLM-based intent classifier that routes to action/query/planning agents
-- [ ] 2.4 Wire conditional routing edges based on intent classification result
-- [ ] 2.5 Add unit tests for intent classification across action/query/planning scenarios
+- [x] 2.1 Define AgentState TypedDict with fields: intent, selected_agent, safety_result, tool_calls, response, conversation_history
+- [x] 2.2 Implement LangGraph state machine with nodes: intent_classification → agent_routing → safety_check → execution → response_generation
+- [x] 2.3 Build LLM-based intent classifier that routes to action/query/planning agents
+- [x] 2.4 Wire conditional routing edges based on intent classification result
+- [x] 2.5 Add unit tests for intent classification across action/query/planning scenarios
 - [ ] 2.6 PR: `git checkout -b feat/p1-langgraph-state-machine` → commit → push → `gh pr create --base main --title "feat(agent-core): implement LangGraph state machine with intent router"`
 
 ## 3. Action Agent
