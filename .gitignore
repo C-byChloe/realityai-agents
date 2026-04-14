@@ -1,0 +1,47 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+.venv/
+venv/
+env/
+
+# Java
+target/
+*.class
+*.jar
+*.war
+.gradle/
+build/
+
+# Node
+node_modules/
+web-dashboard/dist/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Environment
+.env
+.env.local
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Data
+*.db
+chroma_data/
+
+# Generated
+*_pb2.py
+*_pb2_grpc.py
+*_pb2.pyi
