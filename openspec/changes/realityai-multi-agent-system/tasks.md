@@ -50,15 +50,15 @@
 - [x] 6.1 Build CLI entry point: `python cli.py "query"` with conversation loop
 - [x] 6.2 Add formatted output showing selected agent, tools called, and response
 - [x] 6.3 Verify end-to-end routing: query → Query Agent, action → Action Agent, planning → Planning Agent
-- [ ] 6.4 PR: `gh pr create --base main --title "feat(agent-core): add CLI test harness for manual testing"`
+- [x] 6.4 PR: `gh pr create --base main --title "feat(agent-core): add CLI test harness for manual testing"`
 - [ ] 6.5 **Phase 1 milestone**: `git tag v0.1.0-agent-core && git push origin v0.1.0-agent-core`
 
 ## 7. Static Risk Classifier
 
-- [ ] 7.1 Implement RISK_MAP dictionary with tool → risk level mappings
-- [ ] 7.2 Build classifier function that returns risk level and reason
-- [ ] 7.3 Implement default-to-high policy for unknown tools
-- [ ] 7.4 Add unit tests verifying < 1ms execution and correct classification
+- [x] 7.1 Implement RISK_MAP dictionary with tool → risk level mappings
+- [x] 7.2 Build classifier function that returns risk level and reason
+- [x] 7.3 Implement default-to-high policy for unknown tools
+- [x] 7.4 Add unit tests verifying < 1ms execution and correct classification
 - [ ] 7.5 PR: `gh pr create --base main --title "feat(safety): add static risk classifier with tool-level mapping"`
 
 ## 8. Dynamic Intent Analyzer
