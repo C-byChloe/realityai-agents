@@ -85,7 +85,7 @@ class TestSyllabusRetrieve:
         result = syllabus_retrieve.invoke({"course_id": "CS101"})
         assert result["success"] is True
         assert len(result["topics"]) > 0
-        assert "Textbook" in result["materials"]
+        assert "hybrid retrieval" in result["materials"]
 
     def test_unknown_syllabus(self):
         result = syllabus_retrieve.invoke({"course_id": "FAKE999"})

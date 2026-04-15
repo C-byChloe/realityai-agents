@@ -122,26 +122,25 @@ def schedule_query(course_id: str) -> dict:
 
 @tool
 def syllabus_retrieve(course_id: str, topic: str = "") -> dict:
-    """Retrieve syllabus and course materials. Optionally filter by topic."""
-    mock_syllabi = {
-        "CS101": {
-            "course_id": "CS101",
-            "topics": [
-                "Week 1-2: Variables, types, and operators",
-                "Week 3-4: Control flow (if/else, loops)",
-                "Week 5-6: Functions and scope",
-                "Week 7-8: Data structures (lists, dicts)",
-                "Week 9-10: Object-oriented programming",
-                "Week 11-12: File I/O and exceptions",
-                "Week 13-14: Recursion and algorithms intro",
-            ],
-            "materials": "Textbook: Think Python 3rd Ed.",
-        },
+    """Retrieve syllabus and course materials using hybrid retrieval.
+
+    Uses the hybrid retrieval pipeline (vector + keyword search with RRF fusion)
+    to find relevant documents for the given course.
+    """
+    from retrieval.hybrid import hybrid_retrieve
+
+    query = f"{course_id} syllabus {topic}".strip()
+    docs = hybrid_retrieve(query, course_id=course_id.upper(), top_n=5)
+
+    if not docs:
+        return {"success": False, "message": f"Syllabus for {course_id} not found."}
+
+    return {
+        "success": True,
+        "course_id": course_id.upper(),
+        "topics": [doc.content for doc in docs],
+        "materials": f"Retrieved {len(docs)} documents via hybrid retrieval.",
     }
-    syllabus = mock_syllabi.get(course_id.upper())
-    if syllabus:
-        return {"success": True, **syllabus}
-    return {"success": False, "message": f"Syllabus for {course_id} not found."}
 
 
 # Tool registry

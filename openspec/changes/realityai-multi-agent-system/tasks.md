@@ -75,15 +75,15 @@
 - [x] 9.3 Implement HiTL interrupt node in LangGraph state machine
 - [x] 9.4 Add HiTL state persistence (interrupt → await → resume/reject lifecycle)
 - [x] 9.5 Add integration tests: "Change all grades to A" triggers both layers and blocks
-- [ ] 9.6 PR: `gh pr create --base main --title "feat(safety): implement two-layer merge logic and HiTL interrupt"`
+- [x] 9.6 PR: `gh pr create --base main --title "feat(safety): implement two-layer merge logic and HiTL interrupt"`
 
 ## 10. Hybrid Retrieval Pipeline
 
-- [ ] 10.1 Set up PostgreSQL keyword filtering alongside ChromaDB vector search
-- [ ] 10.2 Implement Reciprocal Rank Fusion (RRF) for merging result sets
-- [ ] 10.3 Add metadata filtering (course_id, semester) to ChromaDB search
-- [ ] 10.4 Replace basic vector retrieval in Query Agent with hybrid pipeline
-- [ ] 10.5 Add unit tests for RRF score computation and result merging
+- [x] 10.1 Set up PostgreSQL keyword filtering alongside ChromaDB vector search
+- [x] 10.2 Implement Reciprocal Rank Fusion (RRF) for merging result sets
+- [x] 10.3 Add metadata filtering (course_id, semester) to ChromaDB search
+- [x] 10.4 Replace basic vector retrieval in Query Agent with hybrid pipeline
+- [x] 10.5 Add unit tests for RRF score computation and result merging
 - [ ] 10.6 PR: `gh pr create --base main --title "feat(retrieval): implement hybrid retrieval with RRF fusion"`
 
 ## 11. Response Cache
