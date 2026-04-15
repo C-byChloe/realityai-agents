@@ -59,13 +59,13 @@
 - [x] 7.2 Build classifier function that returns risk level and reason
 - [x] 7.3 Implement default-to-high policy for unknown tools
 - [x] 7.4 Add unit tests verifying < 1ms execution and correct classification
-- [ ] 7.5 PR: `gh pr create --base main --title "feat(safety): add static risk classifier with tool-level mapping"`
+- [x] 7.5 PR: `gh pr create --base main --title "feat(safety): add static risk classifier with tool-level mapping"`
 
 ## 8. Dynamic Intent Analyzer
 
-- [ ] 8.1 Write intent analysis prompt for bulk operations, scope mismatch, and adversarial intent detection
-- [ ] 8.2 Implement lightweight LLM call returning structured JSON: { "flagged": bool, "reason": string | null }
-- [ ] 8.3 Add unit tests for bulk operation detection, privilege escalation, and normal operation pass-through
+- [x] 8.1 Write intent analysis prompt for bulk operations, scope mismatch, and adversarial intent detection
+- [x] 8.2 Implement lightweight LLM call returning structured JSON: { "flagged": bool, "reason": string | null }
+- [x] 8.3 Add unit tests for bulk operation detection, privilege escalation, and normal operation pass-through
 - [ ] 8.4 PR: `gh pr create --base main --title "feat(safety): add LLM-based dynamic intent analyzer"`
 
 ## 9. Safety Merge & HiTL Integration
