@@ -84,17 +84,17 @@
 - [x] 10.3 Add metadata filtering (course_id, semester) to ChromaDB search
 - [x] 10.4 Replace basic vector retrieval in Query Agent with hybrid pipeline
 - [x] 10.5 Add unit tests for RRF score computation and result merging
-- [ ] 10.6 PR: `gh pr create --base main --title "feat(retrieval): implement hybrid retrieval with RRF fusion"`
+- [x] 10.6 PR: `gh pr create --base main --title "feat(retrieval): implement hybrid retrieval with RRF fusion"`
 
 ## 11. Response Cache
 
-- [ ] 11.1 Set up Redis connection and configuration
-- [ ] 11.2 Implement cache key design: hash(normalized_query + course_ids + semester)
-- [ ] 11.3 Build cache hit/miss logic in Query Agent execution path
-- [ ] 11.4 Configure TTL-based expiration (default 1 hour)
-- [ ] 11.5 Ensure non-deterministic queries (tutoring, planning) bypass caching
-- [ ] 11.6 Add unit tests for cache hit, cache miss, and TTL expiration
-- [ ] 11.7 PR: `gh pr create --base main --title "feat(caching): add Redis-backed response cache for deterministic queries"`
+- [x] 11.1 Set up Redis connection and configuration
+- [x] 11.2 Implement cache key design: hash(normalized_query + course_ids + semester)
+- [x] 11.3 Build cache hit/miss logic in Query Agent execution path
+- [x] 11.4 Configure TTL-based expiration (default 1 hour)
+- [x] 11.5 Ensure non-deterministic queries (tutoring, planning) bypass caching
+- [x] 11.6 Add unit tests for cache hit, cache miss, and TTL expiration
+- [x] 11.7 PR: `gh pr create --base main --title "feat(caching): add Redis-backed response cache for deterministic queries"`
 
 ## 12. Prompt Cache
 
