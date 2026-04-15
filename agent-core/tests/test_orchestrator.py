@@ -128,18 +128,30 @@ class TestRouteToAgent:
 
 
 # ---------------------------------------------------------------------------
-# Safety Check (placeholder)
+# Safety Check (two-layer)
 # ---------------------------------------------------------------------------
 
 
 class TestSafetyCheck:
-    """Tests for the placeholder safety check node."""
+    """Tests for the two-layer safety check node."""
 
-    async def test_returns_safe_by_default(self):
-        state = _make_state("anything")
-        result = await safety_check(state)
+    async def test_query_intent_returns_safe(self):
+        """Query intent with unflagged dynamic analysis → safe."""
+        safe_response = json.dumps({"flagged": False, "reason": None})
+        state = _make_state("What time does CS101 meet?", intent="query")
+        with patch("orchestrator._get_llm", return_value=_mock_llm_response(safe_response)):
+            result = await safety_check(state)
         assert result["safety_result"].flagged is False
         assert result["requires_approval"] is False
+
+    async def test_action_intent_flags_high_risk(self):
+        """Action intent maps to high-risk tool → flagged."""
+        safe_response = json.dumps({"flagged": False, "reason": None})
+        state = _make_state("Update a grade", intent="action")
+        with patch("orchestrator._get_llm", return_value=_mock_llm_response(safe_response)):
+            result = await safety_check(state)
+        assert result["safety_result"].flagged is True
+        assert result["requires_approval"] is True
 
 
 # ---------------------------------------------------------------------------
@@ -249,16 +261,18 @@ class TestBuildGraph:
     async def test_full_graph_execution(self):
         """End-to-end test: a query message flows through all nodes."""
         intent_response = json.dumps({"intent": "query", "confidence": 0.9})
+        safety_response = json.dumps({"flagged": False, "reason": None})
         query_response = json.dumps({
             "tool": "schedule_query",
             "arguments": {"course_id": "CS101"},
             "query_type": "deterministic",
         })
 
-        # Mock LLM returns intent classification first, then query agent response
+        # Mock LLM: intent classification → safety check → query agent
         mock_llm = AsyncMock()
         mock_llm.ainvoke.side_effect = [
             AIMessage(content=intent_response),
+            AIMessage(content=safety_response),
             AIMessage(content=query_response),
         ]
 

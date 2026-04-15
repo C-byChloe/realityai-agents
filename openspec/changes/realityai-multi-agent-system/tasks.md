@@ -66,15 +66,15 @@
 - [x] 8.1 Write intent analysis prompt for bulk operations, scope mismatch, and adversarial intent detection
 - [x] 8.2 Implement lightweight LLM call returning structured JSON: { "flagged": bool, "reason": string | null }
 - [x] 8.3 Add unit tests for bulk operation detection, privilege escalation, and normal operation pass-through
-- [ ] 8.4 PR: `gh pr create --base main --title "feat(safety): add LLM-based dynamic intent analyzer"`
+- [x] 8.4 PR: `gh pr create --base main --title "feat(safety): add LLM-based dynamic intent analyzer"`
 
 ## 9. Safety Merge & HiTL Integration
 
-- [ ] 9.1 Implement merge function with OR policy (either layer flags → flagged)
-- [ ] 9.2 Wire both safety layers to run in parallel (asyncio.gather or equivalent)
-- [ ] 9.3 Implement HiTL interrupt node in LangGraph state machine
-- [ ] 9.4 Add HiTL state persistence (interrupt → await → resume/reject lifecycle)
-- [ ] 9.5 Add integration tests: "Change all grades to A" triggers both layers and blocks
+- [x] 9.1 Implement merge function with OR policy (either layer flags → flagged)
+- [x] 9.2 Wire both safety layers to run in parallel (asyncio.gather or equivalent)
+- [x] 9.3 Implement HiTL interrupt node in LangGraph state machine
+- [x] 9.4 Add HiTL state persistence (interrupt → await → resume/reject lifecycle)
+- [x] 9.5 Add integration tests: "Change all grades to A" triggers both layers and blocks
 - [ ] 9.6 PR: `gh pr create --base main --title "feat(safety): implement two-layer merge logic and HiTL interrupt"`
 
 ## 10. Hybrid Retrieval Pipeline

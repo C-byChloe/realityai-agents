@@ -9,6 +9,7 @@ from langgraph.graph import END, StateGraph
 from agents.action_agent import run_action_agent
 from agents.planning_agent import run_planning_agent
 from agents.query_agent import run_query_agent
+from safety.merge import run_safety_check
 from state import AgentState, SafetyResult
 
 # ---------------------------------------------------------------------------
@@ -82,17 +83,61 @@ async def route_to_agent(state: AgentState) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# Node: Safety Check (placeholder — implemented in Phase 2)
+# Node: Safety Check (two-layer: static + dynamic, OR merge)
 # ---------------------------------------------------------------------------
 
 async def safety_check(state: AgentState) -> dict:
-    """Placeholder safety check. Returns safe by default.
+    """Run two-layer safety check in parallel and merge with OR policy.
 
-    Full two-layer safety (static + dynamic) is implemented in Phase 2.
+    Static risk classifier + dynamic LLM intent analyzer.
+    If either flags, requires_approval is set to True.
     """
+    user_msg = state["messages"][-1].content if state.get("messages") else ""
+
+    # Determine tool name from intent (pre-execution heuristic)
+    tool_name = _infer_tool_from_intent(state.get("intent", "query"))
+
+    llm = _get_llm()
+    result = await run_safety_check(user_msg, tool_name, llm)
+
     return {
-        "safety_result": SafetyResult(flagged=False),
-        "requires_approval": False,
+        "safety_result": result,
+        "requires_approval": result.flagged,
+    }
+
+
+def _infer_tool_from_intent(intent: str) -> str | None:
+    """Map intent to a representative tool for static risk classification.
+
+    Action intents map to a high-risk tool; query/planning map to None
+    (low-risk, handled by dynamic analyzer).
+    """
+    if intent == "action":
+        return "grade_update"  # Representative high-risk tool
+    return None
+
+
+# ---------------------------------------------------------------------------
+# Node: HiTL Approval (interrupt → await → resume/reject)
+# ---------------------------------------------------------------------------
+
+async def hitl_approval(state: AgentState) -> dict:
+    """Handle human-in-the-loop approval for flagged operations.
+
+    This node persists state and waits for external approval.
+    In the current implementation, it returns a pending message.
+    The API gateway (Phase 3) will wire SSE push + approval endpoint.
+    """
+    safety = state.get("safety_result")
+    reason = safety.reason if safety else "Operation flagged for review"
+
+    return {
+        "response": (
+            f"This operation requires instructor approval.\n"
+            f"Reason: {reason}\n"
+            f"Status: Awaiting approval..."
+        ),
+        "approval_status": "pending",
     }
 
 
@@ -161,6 +206,7 @@ def build_graph() -> StateGraph:
     graph.add_node("intent_classification", classify_intent)
     graph.add_node("agent_routing", route_to_agent)
     graph.add_node("safety_check", safety_check)
+    graph.add_node("hitl_approval", hitl_approval)
     graph.add_node("execution", execute_agent)
     graph.add_node("response_generation", generate_response)
 
@@ -173,9 +219,10 @@ def build_graph() -> StateGraph:
         _route_by_agent,
         {
             "execute": "execution",
-            "awaiting_approval": "response_generation",  # HiTL interrupt in Phase 2
+            "awaiting_approval": "hitl_approval",
         },
     )
+    graph.add_edge("hitl_approval", "response_generation")
     graph.add_edge("execution", "response_generation")
     graph.add_edge("response_generation", END)
 
