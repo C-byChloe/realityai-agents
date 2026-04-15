@@ -98,10 +98,10 @@
 
 ## 12. Prompt Cache
 
-- [ ] 12.1 Extract static system prompt prefixes per agent (identity, tools, few-shot examples)
-- [ ] 12.2 Implement Anthropic cache_control breakpoints for static prefix caching
-- [ ] 12.3 Verify token usage reduction with prompt caching enabled vs disabled
-- [ ] 12.4 PR: `gh pr create --base main --title "feat(caching): implement prompt caching for static system prompts"`
+- [x] 12.1 Extract static system prompt prefixes per agent (identity, tools, few-shot examples)
+- [x] 12.2 Implement Anthropic cache_control breakpoints for static prefix caching
+- [x] 12.3 Verify token usage reduction with prompt caching enabled vs disabled
+- [x] 12.4 PR: `gh pr create --base main --title "feat(caching): implement prompt caching for static system prompts"`
 
 ## 13. Graceful Degradation
 
