@@ -105,12 +105,12 @@
 
 ## 13. Graceful Degradation
 
-- [ ] 13.1 Implement failure detection: timeout (30s), LLM refusal patterns, hallucination guard, tool call failure
-- [ ] 13.2 Build retry logic with simplified prompt (strip few-shot examples) on first failure
-- [ ] 13.3 Implement instructor escalation on second consecutive failure with full context
-- [ ] 13.4 Add user-facing fallback message: "I've forwarded your request to [instructor name]"
-- [ ] 13.5 Add integration tests for retry and escalation flows
-- [ ] 13.6 PR: `gh pr create --base main --title "feat(agent-core): add graceful degradation with instructor fallback"`
+- [x] 13.1 Implement failure detection: timeout (30s), LLM refusal patterns, hallucination guard, tool call failure
+- [x] 13.2 Build retry logic with simplified prompt (strip few-shot examples) on first failure
+- [x] 13.3 Implement instructor escalation on second consecutive failure with full context
+- [x] 13.4 Add user-facing fallback message: "I've forwarded your request to [instructor name]"
+- [x] 13.5 Add integration tests for retry and escalation flows
+- [x] 13.6 PR: `gh pr create --base main --title "feat(agent-core): add graceful degradation with instructor fallback"`
 
 ## 14. Evaluation Dataset & Harness
 
