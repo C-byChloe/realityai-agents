@@ -114,10 +114,10 @@
 
 ## 14. Evaluation Dataset & Harness
 
-- [ ] 14.1 Create 100 annotated query-document pairs as JSON ground truth dataset
-- [ ] 14.2 Build pytest-based evaluation harness measuring context precision (relevant docs in top-5 / total docs in top-5)
-- [ ] 14.3 Run baseline measurement (vector-only) and hybrid measurement, document results
-- [ ] 14.4 PR: `gh pr create --base main --title "feat(evaluation): seed evaluation dataset and precision harness"`
+- [x] 14.1 Create 100 annotated query-document pairs as JSON ground truth dataset
+- [x] 14.2 Build pytest-based evaluation harness measuring context precision (relevant docs in top-5 / total docs in top-5)
+- [x] 14.3 Run baseline measurement (vector-only) and hybrid measurement, document results
+- [x] 14.4 PR: `gh pr create --base main --title "feat(evaluation): seed evaluation dataset and precision harness"`
 - [ ] 14.5 **Phase 2 milestone (MVP)**: `git tag v0.2.0-safety-rag-cache && git push origin v0.2.0-safety-rag-cache`
 
 ## 15. Protocol Buffer Definitions
