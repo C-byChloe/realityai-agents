@@ -1,0 +1,45 @@
+name: Proto Compilation Check
+
+on:
+  push:
+    paths:
+      - 'proto/**'
+  pull_request:
+    paths:
+      - 'proto/**'
+
+jobs:
+  proto-compile:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install grpcio-tools
+        run: pip install grpcio-tools
+
+      - name: Compile Python gRPC stubs
+        run: ./proto/generate_python.sh
+
+      - name: Verify generated files exist
+        run: |
+          test -f agent-core/proto_gen/course_pb2.py
+          test -f agent-core/proto_gen/course_pb2_grpc.py
+          test -f agent-core/proto_gen/student_pb2.py
+          test -f agent-core/proto_gen/student_pb2_grpc.py
+          test -f agent-core/proto_gen/assignment_pb2.py
+          test -f agent-core/proto_gen/assignment_pb2_grpc.py
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      - name: Verify Java proto compilation
+        working-directory: core-service
+        run: mvn protobuf:compile protobuf:compile-custom -q

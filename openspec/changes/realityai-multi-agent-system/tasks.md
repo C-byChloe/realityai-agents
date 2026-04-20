@@ -122,10 +122,10 @@
 
 ## 15. Protocol Buffer Definitions
 
-- [ ] 15.1 Define course.proto, student.proto, assignment.proto in /proto directory
-- [ ] 15.2 Create Python codegen script for gRPC stubs
-- [ ] 15.3 Create Java codegen configuration for gRPC service interfaces
-- [ ] 15.4 Add CI step to verify proto compilation succeeds
+- [x] 15.1 Define course.proto, student.proto, assignment.proto in /proto directory
+- [x] 15.2 Create Python codegen script for gRPC stubs
+- [x] 15.3 Create Java codegen configuration for gRPC service interfaces
+- [x] 15.4 Add CI step to verify proto compilation succeeds
 - [ ] 15.5 PR: `gh pr create --base main --title "feat(proto): define Protocol Buffer schemas for course/student/assignment"`
 
 ## 16. Spring Boot Core Service

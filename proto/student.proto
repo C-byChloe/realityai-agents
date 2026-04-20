@@ -1,0 +1,66 @@
+syntax = "proto3";
+
+package realityai;
+
+option java_package = "com.realityai.proto";
+option java_multiple_files = true;
+
+message Student {
+  string student_id = 1;
+  string name = 2;
+  string email = 3;
+  repeated Enrollment enrollments = 4;
+}
+
+message Enrollment {
+  string course_id = 1;
+  string semester = 2;
+  string grade = 3;
+  string status = 4;  // ENROLLED, DROPPED, COMPLETED
+}
+
+message GetStudentRequest {
+  string student_id = 1;
+}
+
+message GetStudentResponse {
+  Student student = 1;
+}
+
+message EnrollStudentRequest {
+  string student_id = 1;
+  string course_id = 2;
+  string semester = 3;
+}
+
+message EnrollStudentResponse {
+  Enrollment enrollment = 1;
+}
+
+message DropEnrollmentRequest {
+  string student_id = 1;
+  string course_id = 2;
+  string semester = 3;
+}
+
+message DropEnrollmentResponse {
+  bool success = 1;
+}
+
+message UpdateGradeRequest {
+  string student_id = 1;
+  string course_id = 2;
+  string semester = 3;
+  string grade = 4;
+}
+
+message UpdateGradeResponse {
+  Enrollment enrollment = 1;
+}
+
+service StudentService {
+  rpc GetStudent(GetStudentRequest) returns (GetStudentResponse);
+  rpc EnrollStudent(EnrollStudentRequest) returns (EnrollStudentResponse);
+  rpc DropEnrollment(DropEnrollmentRequest) returns (DropEnrollmentResponse);
+  rpc UpdateGrade(UpdateGradeRequest) returns (UpdateGradeResponse);
+}
