@@ -126,16 +126,16 @@
 - [x] 15.2 Create Python codegen script for gRPC stubs
 - [x] 15.3 Create Java codegen configuration for gRPC service interfaces
 - [x] 15.4 Add CI step to verify proto compilation succeeds
-- [ ] 15.5 PR: `gh pr create --base main --title "feat(proto): define Protocol Buffer schemas for course/student/assignment"`
+- [x] 15.5 PR: `gh pr create --base main --title "feat(proto): define Protocol Buffer schemas for course/student/assignment"`
 
 ## 16. Spring Boot Core Service
 
-- [ ] 16.1 Implement JPA entities: Course, Student, Assignment
-- [ ] 16.2 Create JPA repositories for each entity
-- [ ] 16.3 Implement gRPC service handlers for course/student/assignment CRUD
-- [ ] 16.4 Set up PostgreSQL schema migrations
-- [ ] 16.5 Create seed data script with sample courses, students, and assignments
-- [ ] 16.6 Add unit tests for service layer
+- [x] 16.1 Implement JPA entities: Course, Student, Assignment
+- [x] 16.2 Create JPA repositories for each entity
+- [x] 16.3 Implement gRPC service handlers for course/student/assignment CRUD
+- [x] 16.4 Set up PostgreSQL schema migrations
+- [x] 16.5 Create seed data script with sample courses, students, and assignments
+- [x] 16.6 Add unit tests for service layer
 - [ ] 16.7 PR: `gh pr create --base main --title "feat(core-service): implement Spring Boot gRPC service"`
 
 ## 17. gRPC Integration
