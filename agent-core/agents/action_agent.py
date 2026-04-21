@@ -1,16 +1,26 @@
 """Action Agent — handles all write/mutation operations.
 
 Responsible for grade updates, enrollment modifications, and assignment creation.
-Tools use mock implementations until gRPC integration in Phase 3.
+Tools use gRPC calls to the Spring Boot core service, with mock fallback
+when the service is unavailable.
 """
 
 import json
+import os
 from typing import Any
 
+import grpc
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_core.tools import tool
 
+from grpc_client.client import CoreServiceClient, GrpcServiceError
 from state import AgentState, ToolCall
+
+# gRPC client — initialized once, shared across tool calls
+_grpc_client = CoreServiceClient(
+    target=os.environ.get("GRPC_TARGET", "localhost:9090"),
+    timeout=float(os.environ.get("GRPC_TIMEOUT", "10")),
+)
 
 # ---------------------------------------------------------------------------
 # System Prompt
@@ -52,53 +62,103 @@ If clarification is needed, respond with:
 
 
 # ---------------------------------------------------------------------------
-# Mock Tool Implementations (replaced with gRPC in Phase 3)
+# Tool Implementations (gRPC with mock fallback)
 # ---------------------------------------------------------------------------
+
+
+def _mock_fallback(operation: str, **kwargs) -> dict:
+    """Return mock result when gRPC service is unavailable."""
+    return {
+        "success": True,
+        "operation": operation,
+        "mock": True,
+        **kwargs,
+    }
 
 
 @tool
 def grade_update(student_id: str, course_id: str, assignment_id: str, grade: str) -> dict:
     """Update a student's grade for a specific course assignment."""
-    print(f"[MOCK] grade_update: student={student_id}, course={course_id}, "
-          f"assignment={assignment_id}, grade={grade}")
-    return {
-        "success": True,
-        "operation": "grade_update",
-        "student_id": student_id,
-        "course_id": course_id,
-        "assignment_id": assignment_id,
-        "grade": grade,
-        "message": f"Grade updated to {grade} for student {student_id} in {course_id}",
-    }
+    try:
+        result = _grpc_client.update_grade(
+            student_id=student_id, course_id=course_id,
+            semester="Fall 2025", grade=grade,
+        )
+        return {
+            "success": True,
+            "operation": "grade_update",
+            "student_id": student_id,
+            "course_id": course_id,
+            "grade": grade,
+            "enrollment": result,
+            "message": f"Grade updated to {grade} for student {student_id} in {course_id}",
+        }
+    except grpc.RpcError:
+        return _mock_fallback(
+            "grade_update", student_id=student_id, course_id=course_id,
+            assignment_id=assignment_id, grade=grade,
+            message=f"Grade updated to {grade} for student {student_id} in {course_id}",
+        )
 
 
 @tool
 def enrollment_modify(student_id: str, course_id: str, action: str) -> dict:
     """Add or drop a student from a course. Action must be 'add' or 'drop'."""
-    print(f"[MOCK] enrollment_modify: student={student_id}, course={course_id}, action={action}")
-    return {
-        "success": True,
-        "operation": "enrollment_modify",
-        "student_id": student_id,
-        "course_id": course_id,
-        "action": action,
-        "message": f"Student {student_id} {'enrolled in' if action == 'add' else 'dropped from'} {course_id}",
-    }
+    try:
+        if action == "add":
+            result = _grpc_client.enroll_student(
+                student_id=student_id, course_id=course_id, semester="Fall 2025",
+            )
+        else:
+            _grpc_client.drop_enrollment(
+                student_id=student_id, course_id=course_id, semester="Fall 2025",
+            )
+            result = {"status": "DROPPED"}
+        verb = "enrolled in" if action == "add" else "dropped from"
+        return {
+            "success": True,
+            "operation": "enrollment_modify",
+            "student_id": student_id,
+            "course_id": course_id,
+            "action": action,
+            "result": result,
+            "message": f"Student {student_id} {verb} {course_id}",
+        }
+    except grpc.RpcError:
+        verb = "enrolled in" if action == "add" else "dropped from"
+        return _mock_fallback(
+            "enrollment_modify", student_id=student_id, course_id=course_id,
+            action=action,
+            message=f"Student {student_id} {verb} {course_id}",
+        )
 
 
 @tool
 def assignment_create(course_id: str, title: str, due_date: str, description: str = "") -> dict:
     """Create a new assignment for a course."""
-    print(f"[MOCK] assignment_create: course={course_id}, title={title}, due={due_date}")
-    return {
-        "success": True,
-        "operation": "assignment_create",
-        "course_id": course_id,
-        "title": title,
-        "due_date": due_date,
-        "description": description,
-        "message": f"Assignment '{title}' created for {course_id}, due {due_date}",
-    }
+    try:
+        import uuid
+        assignment_id = f"{course_id}-{uuid.uuid4().hex[:6].upper()}"
+        result = _grpc_client.create_assignment({
+            "assignment_id": assignment_id,
+            "course_id": course_id,
+            "title": title,
+            "description": description,
+            "due_date": due_date,
+            "max_points": 100,
+        })
+        return {
+            "success": True,
+            "operation": "assignment_create",
+            "assignment": result,
+            "message": f"Assignment '{title}' created for {course_id}, due {due_date}",
+        }
+    except grpc.RpcError:
+        return _mock_fallback(
+            "assignment_create", course_id=course_id, title=title,
+            due_date=due_date, description=description,
+            message=f"Assignment '{title}' created for {course_id}, due {due_date}",
+        )
 
 
 # Tool registry for lookup

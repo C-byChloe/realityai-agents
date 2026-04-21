@@ -136,14 +136,14 @@
 - [x] 16.4 Set up PostgreSQL schema migrations
 - [x] 16.5 Create seed data script with sample courses, students, and assignments
 - [x] 16.6 Add unit tests for service layer
-- [ ] 16.7 PR: `gh pr create --base main --title "feat(core-service): implement Spring Boot gRPC service"`
+- [x] 16.7 PR: `gh pr create --base main --title "feat(core-service): implement Spring Boot gRPC service"`
 
 ## 17. gRPC Integration
 
-- [ ] 17.1 Implement Python gRPC client in agent-core
-- [ ] 17.2 Replace Action Agent mock tools with real gRPC calls to Spring Boot
-- [ ] 17.3 Add error handling and timeout configuration for gRPC calls
-- [ ] 17.4 Add integration tests for gRPC communication between Python and Java
+- [x] 17.1 Implement Python gRPC client in agent-core
+- [x] 17.2 Replace Action Agent mock tools with real gRPC calls to Spring Boot
+- [x] 17.3 Add error handling and timeout configuration for gRPC calls
+- [x] 17.4 Add integration tests for gRPC communication between Python and Java
 - [ ] 17.5 PR: `gh pr create --base main --title "feat(agent-core): replace mock tools with real gRPC calls"`
 
 ## 18. FastAPI Gateway

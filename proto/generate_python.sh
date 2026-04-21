@@ -24,4 +24,12 @@ python -m grpc_tools.protoc \
 # Create __init__.py for the generated package
 touch "$OUT_DIR/__init__.py"
 
+# Fix imports: convert bare imports to relative imports within the package
+# e.g., "import course_pb2" → "from . import course_pb2"
+for f in "$OUT_DIR"/*_pb2_grpc.py "$OUT_DIR"/*_pb2.py; do
+    [ -f "$f" ] || continue
+    sed -i '' 's/^import \([a-z_]*_pb2\) as /from . import \1 as /g' "$f"
+    sed -i '' 's/^from \([a-z_]*_pb2\) import /from .\1 import /g' "$f"
+done
+
 echo "Python gRPC stubs generated in $OUT_DIR"
