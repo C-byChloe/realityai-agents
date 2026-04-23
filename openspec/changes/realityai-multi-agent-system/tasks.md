@@ -144,17 +144,17 @@
 - [x] 17.2 Replace Action Agent mock tools with real gRPC calls to Spring Boot
 - [x] 17.3 Add error handling and timeout configuration for gRPC calls
 - [x] 17.4 Add integration tests for gRPC communication between Python and Java
-- [ ] 17.5 PR: `gh pr create --base main --title "feat(agent-core): replace mock tools with real gRPC calls"`
+- [x] 17.5 PR: `gh pr create --base main --title "feat(agent-core): replace mock tools with real gRPC calls"`
 
 ## 18. FastAPI Gateway
 
-- [ ] 18.1 Build FastAPI app entry point on port 8000
-- [ ] 18.2 Implement JWT authentication middleware
-- [ ] 18.3 Implement per-user rate limiting middleware
-- [ ] 18.4 Create POST /chat endpoint routing to agent core
-- [ ] 18.5 Create GET /health endpoint returning service statuses
-- [ ] 18.6 Add unit tests for auth, rate limiting, and routing
-- [ ] 18.7 PR: `gh pr create --base main --title "feat(api-gateway): build FastAPI gateway with auth and rate limiting"`
+- [x] 18.1 Build FastAPI app entry point on port 8000
+- [x] 18.2 Implement JWT authentication middleware
+- [x] 18.3 Implement per-user rate limiting middleware
+- [x] 18.4 Create POST /chat endpoint routing to agent core
+- [x] 18.5 Create GET /health endpoint returning service statuses
+- [x] 18.6 Add unit tests for auth, rate limiting, and routing
+- [x] 18.7 PR: `gh pr create --base main --title "feat(api-gateway): build FastAPI gateway with auth and rate limiting"`
 
 ## 19. SSE & HiTL End-to-End
 
