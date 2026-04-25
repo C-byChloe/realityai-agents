@@ -10,8 +10,10 @@ from fastapi import FastAPI
 
 from auth.jwt import jwt_router
 from middleware.rate_limit import RateLimitMiddleware
+from routes.approval import approval_router
 from routes.chat import chat_router
 from routes.health import health_router
+from routes.sse import sse_router
 
 app = FastAPI(
     title="RealityAI API Gateway",
@@ -29,6 +31,8 @@ app.add_middleware(
 app.include_router(chat_router, prefix="/chat", tags=["chat"])
 app.include_router(health_router, tags=["health"])
 app.include_router(jwt_router, prefix="/auth", tags=["auth"])
+app.include_router(sse_router, prefix="/sse", tags=["sse"])
+app.include_router(approval_router, prefix="/approval", tags=["approval"])
 
 
 @app.get("/")

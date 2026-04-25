@@ -158,12 +158,12 @@
 
 ## 19. SSE & HiTL End-to-End
 
-- [ ] 19.1 Implement SSE stream endpoint with event types: agent_action, approval_request, approval_result, escalation
-- [ ] 19.2 Add connection management for concurrent SSE sessions
-- [ ] 19.3 Create POST /approval/{request_id} endpoint for approve/reject
-- [ ] 19.4 Wire full HiTL cycle: agent interrupt → SSE push → approval POST → agent resume → SSE result
-- [ ] 19.5 Add integration test for complete HiTL approval flow
-- [ ] 19.6 PR: `gh pr create --base main --title "feat(api-gateway): implement SSE and wire HiTL approval flow end-to-end"`
+- [x] 19.1 Implement SSE stream endpoint with event types: agent_action, approval_request, approval_result, escalation
+- [x] 19.2 Add connection management for concurrent SSE sessions
+- [x] 19.3 Create POST /approval/{request_id} endpoint for approve/reject
+- [x] 19.4 Wire full HiTL cycle: agent interrupt → SSE push → approval POST → agent resume → SSE result
+- [x] 19.5 Add integration test for complete HiTL approval flow
+- [x] 19.6 PR: `gh pr create --base main --title "feat(api-gateway): implement SSE and wire HiTL approval flow end-to-end"`
 
 ## 20. LangSmith Integration
 
