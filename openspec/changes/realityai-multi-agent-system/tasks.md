@@ -167,11 +167,11 @@
 
 ## 20. LangSmith Integration
 
-- [ ] 20.1 Add LangSmith callback handler to all agent chains
-- [ ] 20.2 Configure trace spans for each state machine node
-- [ ] 20.3 Log token usage, latency, and tool call success/failure
-- [ ] 20.4 Verify non-blocking behavior (tracing failures don't affect requests)
-- [ ] 20.5 PR: `gh pr create --base main --title "feat(agent-core): integrate LangSmith tracing across agent chains"`
+- [x] 20.1 Add LangSmith callback handler to all agent chains
+- [x] 20.2 Configure trace spans for each state machine node
+- [x] 20.3 Log token usage, latency, and tool call success/failure
+- [x] 20.4 Verify non-blocking behavior (tracing failures don't affect requests)
+- [x] 20.5 PR: `gh pr create --base main --title "feat(agent-core): integrate LangSmith tracing across agent chains"`
 
 ## 21. Event-Driven Cache Invalidation
 
