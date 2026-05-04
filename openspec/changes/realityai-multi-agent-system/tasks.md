@@ -191,10 +191,10 @@
 
 ## 23. Student Chat UI
 
-- [ ] 23.1 Build chat interface with message input and history display
-- [ ] 23.2 Implement SSE connection for streaming LLM responses
-- [ ] 23.3 Add typing indicators and session management
-- [ ] 23.4 Make layout mobile-responsive
+- [x] 23.1 Build chat interface with message input and history display
+- [x] 23.2 Implement SSE connection for streaming LLM responses
+- [x] 23.3 Add typing indicators and session management
+- [x] 23.4 Make layout mobile-responsive
 - [ ] 23.5 PR: `gh pr create --base main --title "feat(web-dashboard): build student chat UI with streaming responses"`
 
 ## 24. Instructor Approval Dashboard
