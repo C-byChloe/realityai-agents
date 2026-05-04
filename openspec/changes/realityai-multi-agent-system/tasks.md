@@ -210,14 +210,14 @@
 - [x] 25.1 Build metrics display: cache hit rate, agent success rate, latency P50/P95
 - [x] 25.2 Integrate LangSmith trace viewer (embed or custom display)
 - [x] 25.3 Add system health dashboard
-- [ ] 25.4 PR: `gh pr create --base main --title "feat(web-dashboard): build admin panel with metrics and trace viewer"`
+- [x] 25.4 PR: `gh pr create --base main --title "feat(web-dashboard): build admin panel with metrics and trace viewer"`
 - [ ] 25.5 **Phase 4 milestone**: `git tag v0.4.0-full-stack && git push origin v0.4.0-full-stack`
 
 ## 26. End-to-End Test Suite
 
-- [ ] 26.1 Create 50+ test scenarios covering enrollment, scheduling, tutoring, planning, and safety
-- [ ] 26.2 Build pytest scenario runner with task completion rate measurement
-- [ ] 26.3 Output results as JSON report
+- [x] 26.1 Create 50+ test scenarios covering enrollment, scheduling, tutoring, planning, and safety
+- [x] 26.2 Build pytest scenario runner with task completion rate measurement
+- [x] 26.3 Output results as JSON report
 - [ ] 26.4 PR: `gh pr create --base main --title "feat(evaluation): build automated end-to-end test suite"`
 
 ## 27. Docker Compose & CI/CD
