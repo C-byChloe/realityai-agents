@@ -218,15 +218,15 @@
 - [x] 26.1 Create 50+ test scenarios covering enrollment, scheduling, tutoring, planning, and safety
 - [x] 26.2 Build pytest scenario runner with task completion rate measurement
 - [x] 26.3 Output results as JSON report
-- [ ] 26.4 PR: `gh pr create --base main --title "feat(evaluation): build automated end-to-end test suite"`
+- [x] 26.4 PR: `gh pr create --base main --title "feat(evaluation): build automated end-to-end test suite"`
 
 ## 27. Docker Compose & CI/CD
 
-- [ ] 27.1 Write production docker-compose.yml with all services, health checks, and dependency ordering
-- [ ] 27.2 Create .env.example with all configurable environment variables
-- [ ] 27.3 Create Dockerfiles for FastAPI gateway, agent-core, Spring Boot, and React dashboard
-- [ ] 27.4 Set up GitHub Actions workflow: lint (ruff + eslint) → unit tests → integration tests → Docker build
-- [ ] 27.5 Configure branch protection rules for main
+- [x] 27.1 Write production docker-compose.yml with all services, health checks, and dependency ordering
+- [x] 27.2 Create .env.example with all configurable environment variables
+- [x] 27.3 Create Dockerfiles for FastAPI gateway, agent-core, Spring Boot, and React dashboard
+- [x] 27.4 Set up GitHub Actions workflow: lint (ruff + eslint) → unit tests → integration tests → Docker build
+- [x] 27.5 Configure branch protection rules for main
 - [ ] 27.6 PR: `gh pr create --base main --title "chore(infra): write Docker Compose for one-click startup and CI/CD pipeline"`
 
 ## 28. Documentation & Polish
