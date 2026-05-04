@@ -51,7 +51,7 @@
 - [x] 6.2 Add formatted output showing selected agent, tools called, and response
 - [x] 6.3 Verify end-to-end routing: query → Query Agent, action → Action Agent, planning → Planning Agent
 - [x] 6.4 PR: `gh pr create --base main --title "feat(agent-core): add CLI test harness for manual testing"`
-- [ ] 6.5 **Phase 1 milestone**: `git tag v0.1.0-agent-core && git push origin v0.1.0-agent-core`
+- [x] 6.5 **Phase 1 milestone**: `git tag v0.1.0-agent-core && git push origin v0.1.0-agent-core`
 
 ## 7. Static Risk Classifier
 
@@ -118,7 +118,7 @@
 - [x] 14.2 Build pytest-based evaluation harness measuring context precision (relevant docs in top-5 / total docs in top-5)
 - [x] 14.3 Run baseline measurement (vector-only) and hybrid measurement, document results
 - [x] 14.4 PR: `gh pr create --base main --title "feat(evaluation): seed evaluation dataset and precision harness"`
-- [ ] 14.5 **Phase 2 milestone (MVP)**: `git tag v0.2.0-safety-rag-cache && git push origin v0.2.0-safety-rag-cache`
+- [x] 14.5 **Phase 2 milestone (MVP)**: `git tag v0.2.0-safety-rag-cache && git push origin v0.2.0-safety-rag-cache`
 
 ## 15. Protocol Buffer Definitions
 
@@ -180,7 +180,7 @@
 - [x] 21.3 Create manual flush endpoint for admin use
 - [x] 21.4 Add tests for cache invalidation on course update
 - [x] 21.5 PR: `gh pr create --base main --title "feat(caching): add event-driven cache invalidation"`
-- [ ] 21.6 **Phase 3 milestone**: `git tag v0.3.0-full-backend && git push origin v0.3.0-full-backend`
+- [x] 21.6 **Phase 3 milestone**: `git tag v0.3.0-full-backend && git push origin v0.3.0-full-backend`
 
 ## 22. Web Dashboard Scaffold
 
@@ -211,7 +211,7 @@
 - [x] 25.2 Integrate LangSmith trace viewer (embed or custom display)
 - [x] 25.3 Add system health dashboard
 - [x] 25.4 PR: `gh pr create --base main --title "feat(web-dashboard): build admin panel with metrics and trace viewer"`
-- [ ] 25.5 **Phase 4 milestone**: `git tag v0.4.0-full-stack && git push origin v0.4.0-full-stack`
+- [x] 25.5 **Phase 4 milestone**: `git tag v0.4.0-full-stack && git push origin v0.4.0-full-stack`
 
 ## 26. End-to-End Test Suite
 
@@ -242,5 +242,5 @@
 - [x] 29.1 Create EC2 or EKS deployment scripts
 - [x] 29.2 Configure production environment variables
 - [x] 29.3 Write deployment documentation
-- [ ] 29.4 PR: `gh pr create --base main --title "chore(infra): add AWS deployment configuration"`
-- [ ] 29.5 **Phase 5 milestone**: `git tag v1.0.0-portfolio-ready && git push origin v1.0.0-portfolio-ready`
+- [x] 29.4 PR: `gh pr create --base main --title "chore(infra): add AWS deployment configuration"`
+- [x] 29.5 **Phase 5 milestone**: `git tag v1.0.0-portfolio-ready && git push origin v1.0.0-portfolio-ready`
