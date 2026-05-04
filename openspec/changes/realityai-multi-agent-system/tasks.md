@@ -175,11 +175,11 @@
 
 ## 21. Event-Driven Cache Invalidation
 
-- [ ] 21.1 Wire course update events from gRPC to cache invalidation logic
-- [ ] 21.2 Invalidate all response cache entries for updated course_id
-- [ ] 21.3 Create manual flush endpoint for admin use
-- [ ] 21.4 Add tests for cache invalidation on course update
-- [ ] 21.5 PR: `gh pr create --base main --title "feat(caching): add event-driven cache invalidation"`
+- [x] 21.1 Wire course update events from gRPC to cache invalidation logic
+- [x] 21.2 Invalidate all response cache entries for updated course_id
+- [x] 21.3 Create manual flush endpoint for admin use
+- [x] 21.4 Add tests for cache invalidation on course update
+- [x] 21.5 PR: `gh pr create --base main --title "feat(caching): add event-driven cache invalidation"`
 - [ ] 21.6 **Phase 3 milestone**: `git tag v0.3.0-full-backend && git push origin v0.3.0-full-backend`
 
 ## 22. Web Dashboard Scaffold
