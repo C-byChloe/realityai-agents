@@ -233,7 +233,7 @@
 
 - [x] 28.1 Write README.md with architecture diagram (Mermaid), quick start guide, and configuration reference
 - [x] 28.2 Document metrics: context precision, task completion rate, cache hit rate, SSE latency
-- [ ] 28.3 Create demo GIF showing HiTL approval flow
+- [x] 28.3 Create demo GIF showing HiTL approval flow
 - [x] 28.4 Add LICENSE file
 - [x] 28.5 PR: `gh pr create --base main --title "docs: write comprehensive README with architecture and demo"`
 

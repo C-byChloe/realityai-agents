@@ -2,6 +2,12 @@
 
 An AI-powered course management assistant for Higher Education, built around a multi-agent orchestration system with two-layer safety controls, hybrid retrieval, and production-grade cost optimization.
 
+## Demo
+
+![HiTL Approval Flow Demo](docs/hitl-demo.gif)
+
+*Student chat → safety flag → instructor approval → admin panel*
+
 ## Architecture
 
 ```mermaid
