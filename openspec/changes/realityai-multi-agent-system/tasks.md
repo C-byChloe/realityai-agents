@@ -195,14 +195,14 @@
 - [x] 23.2 Implement SSE connection for streaming LLM responses
 - [x] 23.3 Add typing indicators and session management
 - [x] 23.4 Make layout mobile-responsive
-- [ ] 23.5 PR: `gh pr create --base main --title "feat(web-dashboard): build student chat UI with streaming responses"`
+- [x] 23.5 PR: `gh pr create --base main --title "feat(web-dashboard): build student chat UI with streaming responses"`
 
 ## 24. Instructor Approval Dashboard
 
-- [ ] 24.1 Build approval queue displaying pending HiTL requests
-- [ ] 24.2 Show agent context (what was attempted, why flagged) for each request
-- [ ] 24.3 Wire Approve/Reject buttons to POST /approval/{request_id}
-- [ ] 24.4 Implement real-time SSE updates for new requests and status changes
+- [x] 24.1 Build approval queue displaying pending HiTL requests
+- [x] 24.2 Show agent context (what was attempted, why flagged) for each request
+- [x] 24.3 Wire Approve/Reject buttons to POST /approval/{request_id}
+- [x] 24.4 Implement real-time SSE updates for new requests and status changes
 - [ ] 24.5 PR: `gh pr create --base main --title "feat(web-dashboard): build instructor approval dashboard"`
 
 ## 25. Admin Panel
