@@ -184,10 +184,10 @@
 
 ## 22. Web Dashboard Scaffold
 
-- [ ] 22.1 Initialize Vite + React + TypeScript + Tailwind project in web-dashboard/
-- [ ] 22.2 Set up router structure: /instructor, /student, /admin
-- [ ] 22.3 Create shared UI components: layout, navigation, cards
-- [ ] 22.4 PR: `gh pr create --base main --title "chore(web-dashboard): initialize React + TypeScript + Tailwind project"`
+- [x] 22.1 Initialize Vite + React + TypeScript + Tailwind project in web-dashboard/
+- [x] 22.2 Set up router structure: /instructor, /student, /admin
+- [x] 22.3 Create shared UI components: layout, navigation, cards
+- [x] 22.4 PR: `gh pr create --base main --title "chore(web-dashboard): initialize React + TypeScript + Tailwind project"`
 
 ## 23. Student Chat UI
 
