@@ -227,14 +227,14 @@
 - [x] 27.3 Create Dockerfiles for FastAPI gateway, agent-core, Spring Boot, and React dashboard
 - [x] 27.4 Set up GitHub Actions workflow: lint (ruff + eslint) → unit tests → integration tests → Docker build
 - [x] 27.5 Configure branch protection rules for main
-- [ ] 27.6 PR: `gh pr create --base main --title "chore(infra): write Docker Compose for one-click startup and CI/CD pipeline"`
+- [x] 27.6 PR: `gh pr create --base main --title "chore(infra): write Docker Compose for one-click startup and CI/CD pipeline"`
 
 ## 28. Documentation & Polish
 
-- [ ] 28.1 Write README.md with architecture diagram (Mermaid), quick start guide, and configuration reference
-- [ ] 28.2 Document metrics: context precision, task completion rate, cache hit rate, SSE latency
+- [x] 28.1 Write README.md with architecture diagram (Mermaid), quick start guide, and configuration reference
+- [x] 28.2 Document metrics: context precision, task completion rate, cache hit rate, SSE latency
 - [ ] 28.3 Create demo GIF showing HiTL approval flow
-- [ ] 28.4 Add LICENSE file
+- [x] 28.4 Add LICENSE file
 - [ ] 28.5 PR: `gh pr create --base main --title "docs: write comprehensive README with architecture and demo"`
 
 ## 29. AWS Deployment (Optional)
