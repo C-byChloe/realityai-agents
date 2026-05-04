@@ -203,13 +203,13 @@
 - [x] 24.2 Show agent context (what was attempted, why flagged) for each request
 - [x] 24.3 Wire Approve/Reject buttons to POST /approval/{request_id}
 - [x] 24.4 Implement real-time SSE updates for new requests and status changes
-- [ ] 24.5 PR: `gh pr create --base main --title "feat(web-dashboard): build instructor approval dashboard"`
+- [x] 24.5 PR: `gh pr create --base main --title "feat(web-dashboard): build instructor approval dashboard"`
 
 ## 25. Admin Panel
 
-- [ ] 25.1 Build metrics display: cache hit rate, agent success rate, latency P50/P95
-- [ ] 25.2 Integrate LangSmith trace viewer (embed or custom display)
-- [ ] 25.3 Add system health dashboard
+- [x] 25.1 Build metrics display: cache hit rate, agent success rate, latency P50/P95
+- [x] 25.2 Integrate LangSmith trace viewer (embed or custom display)
+- [x] 25.3 Add system health dashboard
 - [ ] 25.4 PR: `gh pr create --base main --title "feat(web-dashboard): build admin panel with metrics and trace viewer"`
 - [ ] 25.5 **Phase 4 milestone**: `git tag v0.4.0-full-stack && git push origin v0.4.0-full-stack`
 
