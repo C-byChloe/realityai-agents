@@ -235,12 +235,12 @@
 - [x] 28.2 Document metrics: context precision, task completion rate, cache hit rate, SSE latency
 - [ ] 28.3 Create demo GIF showing HiTL approval flow
 - [x] 28.4 Add LICENSE file
-- [ ] 28.5 PR: `gh pr create --base main --title "docs: write comprehensive README with architecture and demo"`
+- [x] 28.5 PR: `gh pr create --base main --title "docs: write comprehensive README with architecture and demo"`
 
 ## 29. AWS Deployment (Optional)
 
-- [ ] 29.1 Create EC2 or EKS deployment scripts
-- [ ] 29.2 Configure production environment variables
-- [ ] 29.3 Write deployment documentation
+- [x] 29.1 Create EC2 or EKS deployment scripts
+- [x] 29.2 Configure production environment variables
+- [x] 29.3 Write deployment documentation
 - [ ] 29.4 PR: `gh pr create --base main --title "chore(infra): add AWS deployment configuration"`
 - [ ] 29.5 **Phase 5 milestone**: `git tag v1.0.0-portfolio-ready && git push origin v1.0.0-portfolio-ready`
