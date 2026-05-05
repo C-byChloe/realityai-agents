@@ -15,7 +15,12 @@ export function useSSE({ url, token, onMessage }: UseSSEOptions) {
   const [connected, setConnected] = useState(false);
   const sourceRef = useRef<EventSource | null>(null);
   const onMessageRef = useRef(onMessage);
-  onMessageRef.current = onMessage;
+
+  // Keep the ref in sync with the latest callback without triggering a
+  // reconnect on every render.
+  useEffect(() => {
+    onMessageRef.current = onMessage;
+  }, [onMessage]);
 
   useEffect(() => {
     if (!token) return;

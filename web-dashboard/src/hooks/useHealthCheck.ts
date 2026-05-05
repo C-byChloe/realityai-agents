@@ -31,8 +31,14 @@ export function useHealthCheck(intervalMs = 15000) {
   }, []);
 
   useEffect(() => {
-    fetchHealth();
-    const id = setInterval(fetchHealth, intervalMs);
+    // Polling effect: kick off an immediate fetch then poll on an interval.
+    // setState happens asynchronously after each await, so this does not
+    // cascade renders synchronously — the strict-mode rule is over-broad here.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void fetchHealth();
+    const id = setInterval(() => {
+      void fetchHealth();
+    }, intervalMs);
     return () => clearInterval(id);
   }, [fetchHealth, intervalMs]);
 
