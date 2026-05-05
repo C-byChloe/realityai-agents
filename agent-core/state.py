@@ -6,6 +6,8 @@ from langgraph.graph.message import add_messages
 from pydantic import BaseModel, Field
 from typing_extensions import TypedDict
 
+from schemas.plan import PlanStep
+
 
 class SafetyResult(BaseModel):
     """Result from the two-layer safety system."""
@@ -26,7 +28,7 @@ class ToolCall(BaseModel):
     error: str | None = None
 
 
-class AgentState(TypedDict):
+class AgentState(TypedDict, total=False):
     """State schema for the LangGraph state machine.
 
     Flows through: intent_classification → agent_routing → safety_check
@@ -48,6 +50,13 @@ class AgentState(TypedDict):
 
     # Execution
     tool_calls: list[ToolCall]
+
+    # Planning agent state — typed DAG of plan steps + per-step outputs.
+    # `plan` is the structured DAG produced by make_plan; `step_outputs` is
+    # keyed by step_id and holds whatever typed object that step returned
+    # (StudentTranscript, list[CourseSection], list[ScheduleOption], ...).
+    plan: list[PlanStep]
+    step_outputs: dict[int, Any]
 
     # Response
     response: str
