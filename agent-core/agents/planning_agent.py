@@ -1,164 +1,476 @@
-"""Planning Agent — handles multi-step reasoning and task decomposition.
+"""Planning Agent — emits a typed Plan DAG and executes it as a LangGraph subgraph.
 
-Responsible for complex requests that require chain-of-thought decomposition
-and coordination of Action/Query agent tools across multiple sub-steps.
+Design (Phase 1):
+
+  1. `make_plan()` — LLM emits a typed `Plan` (`schemas/plan.py`).
+  2. `compile_plan_graph(plan)` — builds a fresh `StateGraph` where each
+     `PlanStep` is its own node (`step_<id>_<agent_type>`). Edges come
+     from `depends_on`. Steps with no deps wire from START; leaf steps
+     wire to END.
+  3. `run_planning_agent()` invokes the compiled subgraph.
+
+LangGraph runs nodes with no inter-dependency in the same superstep, so
+plan-level parallelism is the runtime's job, not ours. Each step shows
+up as its own LangSmith span — no opaque "execution" blob.
+
+Talking-Point alignment:
+  - TP1 "plan steps lock plan-time decisions": dispatch by `agent_type`.
+  - TP3 "LLM at the ends, symbolic in the middle": reasoning + solver
+    nodes call deterministic code; LLM only runs at make_plan() and
+    optionally inside the explain_schedule reasoning template.
 """
 
+from __future__ import annotations
+
 import json
-from typing import Any
+import operator
+from typing import Annotated, Any
 
 from langchain_core.messages import HumanMessage, SystemMessage
-from langchain_core.tools import tool
+from langgraph.graph import END, START, StateGraph
+from pydantic import ValidationError
+from typing_extensions import TypedDict
 
-from agents.action_agent import ACTION_TOOLS
-from agents.query_agent import QUERY_TOOLS
+from agents.action_agent import ACTION_TOOLS, run_action_step
+from agents.query_agent import QUERY_TOOLS, run_query_step
+from reasoning.gap_analysis import compute_unsatisfied
+from reasoning.solver import ConstraintSolver
+from schemas.plan import AgentType, Plan, PlanStep
+from schemas.query_outputs import (
+    CourseSection,
+    DegreeProgram,
+    StudentTranscript,
+)
+from schemas.solver import ScheduleConstraints, ScheduleOption
 from state import AgentState, ToolCall
 
 # ---------------------------------------------------------------------------
-# System Prompt
+# System Prompt — typed Plan emission
 # ---------------------------------------------------------------------------
 
 PLANNING_AGENT_SYSTEM_PROMPT = """\
-You are the Planning Agent for a university course management system.
+You are the Planning Agent for a university course management system. You
+decompose complex multi-step requests into a typed Plan DAG.
 
-## Identity
-You handle COMPLEX, MULTI-STEP requests that require reasoning and coordination.
-You decompose requests into sub-steps, then execute them using tools from the
-Action Agent (write operations) and Query Agent (read operations).
+## Plan schema
 
-You do NOT handle simple lookups — that is the Query Agent's job.
-You do NOT handle single write operations — that is the Action Agent's job.
-You handle tasks that require MULTIPLE steps or REASONING across data.
+Each step is a JSON object with:
+  - step_id: integer, unique within the plan
+  - description: short natural-language label (for traces only)
+  - depends_on: list of upstream step_ids (use [] for independent steps)
+  - agent_type: one of "query", "reasoning", "action", "constraint_solver"
 
-## Chain-of-Thought Decomposition
-For each request:
-1. Analyze what the user wants to achieve
-2. Break it down into numbered sub-steps
-3. Identify which tool each sub-step requires
-4. Execute sub-steps in order, using results from earlier steps
+Per agent_type, populate the matching fields:
 
-## Available Tools (from Action and Query agents)
-Read tools: course_lookup, schedule_query, syllabus_retrieve
-Write tools: grade_update, enrollment_modify, assignment_create
+  agent_type=query:
+    query_source: one of "canvas", "degree_db", "catalog_db", "syllabus_rag"
+    query_params: source-specific dict (e.g., {"user_id": "u1"})
 
-## Few-Shot Examples
+  agent_type=reasoning:
+    reasoning_inputs: list of upstream step_ids whose outputs are needed
+    reasoning_template: one of "extract_unsatisfied_elective_pool",
+      "explain_schedule_recommendation"
 
-### Example 1: Semester Planning
-User: "Plan my next semester avoiding Friday classes"
-Decomposition:
-1. Query available courses → schedule_query for each
-2. Filter out courses with Friday meetings
-3. Check prerequisites for remaining courses → course_lookup
-4. Propose a balanced schedule
+  agent_type=action:
+    action_tool: one of "grade_update", "enrollment_modify", "assignment_create"
+    action_args: tool-specific dict
 
-### Example 2: Prerequisite Analysis
-User: "What do I need before I can take CS201?"
-Decomposition:
-1. Look up CS201 details → course_lookup("CS201")
-2. Retrieve prerequisite information → syllabus_retrieve("CS201")
-3. Summarize prerequisites and recommendations
+  agent_type=constraint_solver:
+    solver_type: one of "schedule_csp", "prereq_check"
+    solver_inputs: solver-specific dict; may use "<from_step_N>" to reference
+      upstream typed outputs (e.g., {"candidates": "<from_step_4>"})
 
-### Example 3: Multi-step Enrollment
-User: "Drop CS101 and enroll me in CS201 instead"
-Decomposition:
-1. Look up CS201 to verify it exists → course_lookup("CS201")
-2. Check CS201 schedule → schedule_query("CS201")
-3. Drop CS101 → enrollment_modify(action="drop")
-4. Enroll in CS201 → enrollment_modify(action="add")
+## Independence and parallelism
 
-## Output Format
+Steps with depends_on=[] run in parallel. Use depends_on only when a step
+genuinely needs an upstream output. Do NOT serialize independent queries.
+
+## Output format
+
 Respond with a JSON object:
 {
-  "plan": [
-    {
-      "step": 1,
-      "description": "<what this step does>",
-      "tool": "<tool_name>",
-      "arguments": { ... }
-    },
-    ...
-  ],
-  "reasoning": "<brief explanation of your approach>"
+  "steps": [ <PlanStep>, ... ],
+  "reasoning": "<one-sentence explanation>"
 }
 """
 
 
-# Combined tool registry (Planning Agent can use tools from both agents)
+# ---------------------------------------------------------------------------
+# Combined registry — kept for back-compat with consumers that import this
+# ---------------------------------------------------------------------------
+
+
 PLANNING_TOOLS = {**QUERY_TOOLS, **ACTION_TOOLS}
 
 
 # ---------------------------------------------------------------------------
-# Agent Execution
+# Subgraph state with reducers (parallel-write safe)
+# ---------------------------------------------------------------------------
+
+
+def _merge_step_outputs(left: dict, right: dict) -> dict:
+    """Reducer for parallel writes to step_outputs.
+
+    LangGraph runs sibling nodes in the same superstep, and each node's
+    return value is merged into state via this reducer. Without it,
+    concurrent writes raise `InvalidUpdateError`.
+    """
+    return {**(left or {}), **(right or {})}
+
+
+class PlanExecState(TypedDict):
+    """State scoped to one plan execution. Lives only inside the compiled
+    plan subgraph; never leaks to `AgentState`.
+    """
+
+    plan: Plan
+    step_outputs: Annotated[dict[int, Any], _merge_step_outputs]
+    tool_calls: Annotated[list[ToolCall], operator.add]
+
+
+# ---------------------------------------------------------------------------
+# Step-node factory
+# ---------------------------------------------------------------------------
+
+
+def _make_step_node(step: PlanStep):
+    """Build an async node function bound to a single PlanStep.
+
+    Each call returns the partial state update for *only this step*:
+    `step_outputs={step_id: result}` and `tool_calls=[ToolCall(...)]`.
+    The reducers merge these with sibling nodes' updates.
+    """
+
+    async def node(state: PlanExecState) -> dict:
+        try:
+            result = await _dispatch_step(step, state.get("step_outputs", {}))
+        except Exception as e:
+            return {
+                "step_outputs": {step.step_id: e},
+                "tool_calls": [ToolCall(
+                    tool_name=_step_label(step),
+                    arguments=_step_args(step),
+                    success=False,
+                    error=str(e),
+                )],
+            }
+        return {
+            "step_outputs": {step.step_id: result},
+            "tool_calls": [ToolCall(
+                tool_name=_step_label(step),
+                arguments=_step_args(step),
+                result=_summarize_for_trace(result),
+                success=True,
+            )],
+        }
+
+    node.__name__ = step_node_name(step)
+    return node
+
+
+def step_node_name(step: PlanStep) -> str:
+    """Stable node name used in graph + trace."""
+    suffix = step.agent_type.value
+    if step.agent_type is AgentType.QUERY and step.query_source is not None:
+        suffix = f"query_{step.query_source.value}"
+    elif step.agent_type is AgentType.CONSTRAINT_SOLVER and step.solver_type:
+        suffix = f"solver_{step.solver_type}"
+    elif step.agent_type is AgentType.REASONING and step.reasoning_template:
+        suffix = f"reasoning_{step.reasoning_template}"
+    elif step.agent_type is AgentType.ACTION and step.action_tool:
+        suffix = f"action_{step.action_tool}"
+    return f"step_{step.step_id}_{suffix}"
+
+
+# ---------------------------------------------------------------------------
+# Per-agent_type dispatch (sync handlers run in worker threads)
+# ---------------------------------------------------------------------------
+
+
+import asyncio
+
+
+async def _dispatch_step(step: PlanStep, step_outputs: dict[int, Any]) -> Any:
+    if step.agent_type is AgentType.QUERY:
+        return await asyncio.to_thread(run_query_step, step, step_outputs)
+    if step.agent_type is AgentType.ACTION:
+        return await asyncio.to_thread(run_action_step, step, step_outputs)
+    if step.agent_type is AgentType.REASONING:
+        return await asyncio.to_thread(_run_reasoning_step, step, step_outputs)
+    if step.agent_type is AgentType.CONSTRAINT_SOLVER:
+        return await asyncio.to_thread(_run_solver_step, step, step_outputs)
+    raise ValueError(f"unknown agent_type: {step.agent_type}")
+
+
+# ---------------------------------------------------------------------------
+# Reasoning step (template registry)
+# ---------------------------------------------------------------------------
+
+
+def _run_reasoning_step(step: PlanStep, step_outputs: dict[int, Any]) -> Any:
+    template = step.reasoning_template
+    inputs = [step_outputs[i] for i in (step.reasoning_inputs or [])]
+
+    if template == "extract_unsatisfied_elective_pool":
+        program = _expect(inputs, DegreeProgram)
+        transcript = _expect(inputs, StudentTranscript)
+        return compute_unsatisfied(program, transcript)
+
+    if template == "explain_schedule_recommendation":
+        options = _expect(inputs, list)
+        if not options:
+            return "No valid schedule options found."
+        top = options[0]
+        if not isinstance(top, ScheduleOption):
+            raise ValueError("explain_schedule_recommendation expects list[ScheduleOption]")
+        codes = ", ".join(c.course_code for c in top.courses)
+        return (
+            f"Recommended schedule: {codes} "
+            f"({top.total_credits} credits). All listed courses have prereqs met "
+            f"and no time conflicts."
+        )
+
+    raise ValueError(f"unknown reasoning_template: {template}")
+
+
+def _expect(inputs: list[Any], cls: type) -> Any:
+    for v in inputs:
+        if isinstance(v, cls):
+            return v
+    raise ValueError(f"reasoning step missing input of type {cls.__name__}")
+
+
+# ---------------------------------------------------------------------------
+# Constraint solver step
+# ---------------------------------------------------------------------------
+
+
+def _run_solver_step(step: PlanStep, step_outputs: dict[int, Any]) -> Any:
+    if step.solver_type == "schedule_csp":
+        inputs = _resolve_solver_inputs(step.solver_inputs or {}, step_outputs)
+        candidates = inputs.get("candidates")
+        completed = inputs.get("completed")
+        constraints_raw = inputs.get("constraints")
+
+        if not isinstance(candidates, list) or not all(isinstance(c, CourseSection) for c in candidates):
+            raise ValueError("schedule_csp expects candidates: list[CourseSection]")
+
+        if isinstance(completed, StudentTranscript):
+            completed_set = completed.completed
+        elif isinstance(completed, set):
+            completed_set = completed
+        elif isinstance(completed, list):
+            completed_set = set(completed)
+        else:
+            completed_set = set()
+
+        if isinstance(constraints_raw, ScheduleConstraints):
+            constraints = constraints_raw
+        else:
+            constraints = ScheduleConstraints.model_validate(constraints_raw or {})
+
+        return ConstraintSolver().solve(candidates, completed_set, constraints)
+
+    if step.solver_type == "prereq_check":
+        raise NotImplementedError("prereq_check solver is not implemented yet")
+
+    raise ValueError(f"unknown solver_type: {step.solver_type}")
+
+
+def _resolve_solver_inputs(inputs: dict, step_outputs: dict[int, Any]) -> dict:
+    out = {}
+    for k, v in inputs.items():
+        if isinstance(v, str) and v.startswith("<from_step_") and v.endswith(">"):
+            ref = int(v[len("<from_step_"):-1])
+            out[k] = step_outputs[ref]
+        else:
+            out[k] = v
+    return out
+
+
+# ---------------------------------------------------------------------------
+# Trace helpers
+# ---------------------------------------------------------------------------
+
+
+def _step_label(step: PlanStep) -> str:
+    if step.agent_type is AgentType.QUERY:
+        return f"query/{step.query_source.value}" if step.query_source else "query"
+    if step.agent_type is AgentType.ACTION:
+        return step.action_tool or "action"
+    if step.agent_type is AgentType.REASONING:
+        return f"reasoning/{step.reasoning_template}"
+    if step.agent_type is AgentType.CONSTRAINT_SOLVER:
+        return f"solver/{step.solver_type}"
+    return str(step.agent_type)
+
+
+def _step_args(step: PlanStep) -> dict:
+    if step.agent_type is AgentType.QUERY:
+        return step.query_params or {}
+    if step.agent_type is AgentType.ACTION:
+        return step.action_args or {}
+    if step.agent_type is AgentType.REASONING:
+        return {
+            "inputs": step.reasoning_inputs,
+            "template": step.reasoning_template,
+        }
+    if step.agent_type is AgentType.CONSTRAINT_SOLVER:
+        return step.solver_inputs or {}
+    return {}
+
+
+def _summarize_for_trace(result: Any) -> Any:
+    if isinstance(result, StudentTranscript):
+        return {"type": "StudentTranscript", "completed": sorted(result.completed)}
+    if isinstance(result, DegreeProgram):
+        return {"type": "DegreeProgram", "major": result.major, "track": result.track}
+    if isinstance(result, list):
+        if result and isinstance(result[0], CourseSection):
+            return {"type": "list[CourseSection]", "codes": [c.course_code for c in result]}
+        if result and isinstance(result[0], ScheduleOption):
+            return {
+                "type": "list[ScheduleOption]",
+                "count": len(result),
+                "top_courses": [c.course_code for c in result[0].courses] if result else [],
+            }
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Dynamic graph compilation — Phase 1 deliverable
+# ---------------------------------------------------------------------------
+
+
+def compile_plan_graph(plan: Plan):
+    """Build a `StateGraph` where each PlanStep is its own node.
+
+    Edges:
+      - START → step_<id>     for every root (depends_on == [])
+      - step_<dep> → step_<id> for every dependency
+      - step_<id> → END        for every leaf (no other step depends on it)
+
+    Sibling steps (no inter-dependency) are scheduled in the same
+    LangGraph superstep, so parallelism is the runtime's responsibility.
+    """
+    graph = StateGraph(PlanExecState)
+    node_names = {s.step_id: step_node_name(s) for s in plan.steps}
+
+    for step in plan.steps:
+        graph.add_node(node_names[step.step_id], _make_step_node(step))
+
+    dependants: dict[int, set[int]] = {s.step_id: set() for s in plan.steps}
+    for step in plan.steps:
+        for dep in step.depends_on:
+            dependants[dep].add(step.step_id)
+
+    for step in plan.steps:
+        target = node_names[step.step_id]
+        if not step.depends_on:
+            graph.add_edge(START, target)
+        elif len(step.depends_on) == 1:
+            graph.add_edge(node_names[step.depends_on[0]], target)
+        else:
+            # Multiple parents — use list-source add_edge for AND-join.
+            # Without this LangGraph fires the node once per incoming edge.
+            graph.add_edge([node_names[d] for d in step.depends_on], target)
+        if not dependants[step.step_id]:
+            graph.add_edge(target, END)
+
+    return graph.compile()
+
+
+# ---------------------------------------------------------------------------
+# Plan emission (LLM call)
+# ---------------------------------------------------------------------------
+
+
+async def make_plan(user_query: str, llm) -> tuple[Plan | None, str, str]:
+    """Ask the LLM for a typed Plan. Returns (plan, reasoning, raw_response).
+
+    plan is None when the LLM produced no parseable plan or no steps.
+    raw_response is returned for trace/error surfacing.
+    """
+    messages = [
+        SystemMessage(content=PLANNING_AGENT_SYSTEM_PROMPT),
+        HumanMessage(content=user_query),
+    ]
+    ai_response = await llm.ainvoke(messages)
+    raw = ai_response.content if hasattr(ai_response, "content") else str(ai_response)
+
+    try:
+        result = json.loads(raw)
+    except (json.JSONDecodeError, AttributeError):
+        return None, "", raw
+
+    reasoning = result.get("reasoning", "")
+    raw_steps = result.get("steps", [])
+
+    if not raw_steps:
+        return None, reasoning, raw
+
+    try:
+        plan = Plan(
+            steps=[PlanStep.model_validate(s) for s in raw_steps],
+            reasoning=reasoning,
+        )
+    except ValidationError as e:
+        return None, f"Plan validation failed: {e}", raw
+
+    return plan, reasoning, raw
+
+
+# ---------------------------------------------------------------------------
+# Agent entry point (intent-router)
 # ---------------------------------------------------------------------------
 
 
 async def run_planning_agent(state: AgentState, llm) -> dict:
-    """Execute the Planning Agent: decompose the task and execute sub-steps.
+    """Plan a multi-step request and execute the plan as a LangGraph subgraph."""
+    user_query = state["messages"][-1].content
+    plan, reasoning, raw = await make_plan(user_query, llm)
 
-    Returns updated state fields: response, tool_calls.
-    """
-    messages = [
-        SystemMessage(content=PLANNING_AGENT_SYSTEM_PROMPT),
-        HumanMessage(content=state["messages"][-1].content),
-    ]
-    ai_response = await llm.ainvoke(messages)
-
-    # Parse the LLM response
-    try:
-        result = json.loads(ai_response.content)
-    except (json.JSONDecodeError, AttributeError):
+    if plan is None:
+        if reasoning.startswith("Plan validation failed"):
+            return {
+                "response": reasoning,
+                "tool_calls": [],
+                "plan": [],
+                "step_outputs": {},
+            }
         return {
-            "response": ai_response.content if hasattr(ai_response, "content") else str(ai_response),
+            "response": reasoning or raw,
             "tool_calls": [],
+            "plan": [],
+            "step_outputs": {},
         }
 
-    plan = result.get("plan", [])
-    reasoning = result.get("reasoning", "")
+    subgraph = compile_plan_graph(plan)
+    result = await subgraph.ainvoke({
+        "plan": plan,
+        "step_outputs": {},
+        "tool_calls": [],
+    })
 
-    if not plan:
-        return {
-            "response": reasoning or "I couldn't create a plan for this request.",
-            "tool_calls": [],
-        }
+    step_outputs = result.get("step_outputs", {})
+    tool_calls = result.get("tool_calls", [])
 
-    # Execute each step in the plan
-    all_tool_calls = []
-    step_results = []
-
-    for step in plan:
-        tool_name = step.get("tool", "")
-        arguments = step.get("arguments", {})
-        description = step.get("description", "")
-
-        tool_func = PLANNING_TOOLS.get(tool_name)
-        if not tool_func:
-            tc = ToolCall(tool_name=tool_name, arguments=arguments,
-                          success=False, error=f"Unknown tool: {tool_name}")
-            all_tool_calls.append(tc)
-            step_results.append(f"Step {step.get('step', '?')}: {description} — FAILED (unknown tool)")
-            continue
-
-        try:
-            tool_result = tool_func.invoke(arguments)
-            tc = ToolCall(tool_name=tool_name, arguments=arguments,
-                          result=tool_result, success=True)
-            all_tool_calls.append(tc)
-            step_results.append(
-                f"Step {step.get('step', '?')}: {description} — OK"
-            )
-        except Exception as e:
-            tc = ToolCall(tool_name=tool_name, arguments=arguments,
-                          success=False, error=str(e))
-            all_tool_calls.append(tc)
-            step_results.append(
-                f"Step {step.get('step', '?')}: {description} — FAILED ({e})"
-            )
-
-    # Format response
-    response_parts = [f"**Plan:** {reasoning}", ""]
-    response_parts.extend(step_results)
+    response_parts = [f"**Plan:** {plan.reasoning}", ""]
+    tc_by_label = {(tc.tool_name, json.dumps(tc.arguments, default=str)): tc for tc in tool_calls}
+    for s in plan.steps:
+        key = (_step_label(s), json.dumps(_step_args(s), default=str))
+        tc = tc_by_label.get(key)
+        if tc and tc.success:
+            marker = "OK"
+        elif tc:
+            marker = f"FAILED ({tc.error})"
+        else:
+            marker = "?"
+        response_parts.append(f"Step {s.step_id}: {s.description} — {marker}")
 
     return {
         "response": "\n".join(response_parts),
-        "tool_calls": all_tool_calls,
+        "tool_calls": tool_calls,
+        "plan": plan.steps,
+        "step_outputs": step_outputs,
     }
