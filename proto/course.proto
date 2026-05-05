@@ -1,0 +1,48 @@
+syntax = "proto3";
+
+package realityai;
+
+option java_package = "com.realityai.proto";
+option java_multiple_files = true;
+
+message Course {
+  string course_id = 1;
+  string name = 2;
+  string description = 3;
+  string instructor = 4;
+  string schedule = 5;
+  string location = 6;
+  int32 credits = 7;
+  string semester = 8;
+  repeated string prerequisites = 9;
+}
+
+message GetCourseRequest {
+  string course_id = 1;
+}
+
+message GetCourseResponse {
+  Course course = 1;
+}
+
+message ListCoursesRequest {
+  string semester = 1;
+}
+
+message ListCoursesResponse {
+  repeated Course courses = 1;
+}
+
+message UpdateCourseRequest {
+  Course course = 1;
+}
+
+message UpdateCourseResponse {
+  Course course = 1;
+}
+
+service CourseService {
+  rpc GetCourse(GetCourseRequest) returns (GetCourseResponse);
+  rpc ListCourses(ListCoursesRequest) returns (ListCoursesResponse);
+  rpc UpdateCourse(UpdateCourseRequest) returns (UpdateCourseResponse);
+}

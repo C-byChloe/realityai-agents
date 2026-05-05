@@ -1,0 +1,45 @@
+syntax = "proto3";
+
+package realityai;
+
+option java_package = "com.realityai.proto";
+option java_multiple_files = true;
+
+message Assignment {
+  string assignment_id = 1;
+  string course_id = 2;
+  string title = 3;
+  string description = 4;
+  string due_date = 5;
+  int32 max_points = 6;
+}
+
+message GetAssignmentRequest {
+  string assignment_id = 1;
+}
+
+message GetAssignmentResponse {
+  Assignment assignment = 1;
+}
+
+message ListAssignmentsRequest {
+  string course_id = 1;
+}
+
+message ListAssignmentsResponse {
+  repeated Assignment assignments = 1;
+}
+
+message CreateAssignmentRequest {
+  Assignment assignment = 1;
+}
+
+message CreateAssignmentResponse {
+  Assignment assignment = 1;
+}
+
+service AssignmentService {
+  rpc GetAssignment(GetAssignmentRequest) returns (GetAssignmentResponse);
+  rpc ListAssignments(ListAssignmentsRequest) returns (ListAssignmentsResponse);
+  rpc CreateAssignment(CreateAssignmentRequest) returns (CreateAssignmentResponse);
+}
