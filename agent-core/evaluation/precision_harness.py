@@ -1,9 +1,14 @@
-"""Evaluation harness for measuring context precision.
+"""Evaluation harness for retrieval precision and recall.
 
-Context precision = relevant docs in top-5 / total docs in top-5
+Metrics:
+  Precision@k = |relevant ∩ retrieved_top_k| / min(k, |retrieved_top_k|)
+  Recall@k    = |relevant ∩ retrieved_top_k| / |relevant|
 
-Compares vector-only and hybrid retrieval against 100 annotated
-query-document pairs.
+Both Precision@5 and Recall@5 are computed against `ground_truth.json`
+(self-curated annotations against the mock document universe). Compares
+vector-only vs. hybrid (vector + keyword + RRF fusion).
+
+See `evaluation/README.md` for methodology and honest limitations.
 """
 
 import json
@@ -27,15 +32,10 @@ def evaluate_retrieval(
 ) -> dict:
     """Evaluate a retrieval function against ground truth.
 
-    Args:
-        retrieve_fn: Function(query, course_id) → list[Document]
-        ground_truth: List of annotated query-document pairs.
-        top_n: Number of results to consider.
-
-    Returns:
-        Dict with precision metrics and per-query details.
+    Returns aggregate Precision@k and Recall@k plus per-query details.
     """
     total_precision = 0.0
+    total_recall = 0.0
     results = []
 
     for entry in ground_truth:
@@ -47,8 +47,15 @@ def evaluate_retrieval(
         retrieved_ids = {doc.doc_id for doc in retrieved[:top_n]}
 
         hits = len(expected & retrieved_ids)
+        # Precision normalizes by the *capacity* of the result slot, capped
+        # by the number of relevant docs (so a query with 1 relevant doc
+        # can score 1.0 even though we returned 5).
         precision = hits / min(len(expected), top_n) if expected else 0.0
+        # Recall is hits / total relevant.
+        recall = hits / len(expected) if expected else 0.0
+
         total_precision += precision
+        total_recall += recall
 
         results.append({
             "id": entry["id"],
@@ -57,22 +64,21 @@ def evaluate_retrieval(
             "retrieved": list(retrieved_ids),
             "hits": hits,
             "precision": precision,
+            "recall": recall,
         })
 
-    avg_precision = total_precision / len(ground_truth) if ground_truth else 0.0
-
+    n = len(ground_truth) or 1
     return {
         "total_queries": len(ground_truth),
-        "average_precision": round(avg_precision, 4),
+        "top_n": top_n,
+        "average_precision": round(total_precision / n, 4),
+        "average_recall": round(total_recall / n, 4),
         "details": results,
     }
 
 
 def run_baseline_vs_hybrid(ground_truth: list[dict] | None = None) -> dict:
-    """Run both vector-only and hybrid evaluations and compare.
-
-    Returns results for both methods and the improvement delta.
-    """
+    """Run both vector-only and hybrid evaluations and compare."""
     if ground_truth is None:
         ground_truth = load_ground_truth()
 
@@ -87,14 +93,21 @@ def run_baseline_vs_hybrid(ground_truth: list[dict] | None = None) -> dict:
 
     return {
         "vector_only": {
-            "precision": baseline["average_precision"],
+            "precision_at_5": baseline["average_precision"],
+            "recall_at_5": baseline["average_recall"],
             "total_queries": baseline["total_queries"],
         },
         "hybrid": {
-            "precision": hybrid_result["average_precision"],
+            "precision_at_5": hybrid_result["average_precision"],
+            "recall_at_5": hybrid_result["average_recall"],
             "total_queries": hybrid_result["total_queries"],
         },
-        "improvement": round(
-            hybrid_result["average_precision"] - baseline["average_precision"], 4
-        ),
+        "improvement": {
+            "precision_at_5": round(
+                hybrid_result["average_precision"] - baseline["average_precision"], 4
+            ),
+            "recall_at_5": round(
+                hybrid_result["average_recall"] - baseline["average_recall"], 4
+            ),
+        },
     }

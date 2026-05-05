@@ -81,19 +81,22 @@ class TestBaselineVsHybrid:
         gt = load_ground_truth()[:20]
         result = run_baseline_vs_hybrid(gt)
 
-        assert 0.0 <= result["vector_only"]["precision"] <= 1.0
-        assert 0.0 <= result["hybrid"]["precision"] <= 1.0
+        assert 0.0 <= result["vector_only"]["precision_at_5"] <= 1.0
+        assert 0.0 <= result["hybrid"]["precision_at_5"] <= 1.0
+        assert 0.0 <= result["vector_only"]["recall_at_5"] <= 1.0
+        assert 0.0 <= result["hybrid"]["recall_at_5"] <= 1.0
 
     def test_full_dataset_evaluation(self):
         """Run full evaluation on all 100 pairs and document results."""
         result = run_baseline_vs_hybrid()
 
-        # Both should produce valid precision values
         assert result["vector_only"]["total_queries"] == 100
         assert result["hybrid"]["total_queries"] == 100
 
-        # Log results for documentation
-        print(f"\n--- Retrieval Precision Results ---")
-        print(f"Vector-only: {result['vector_only']['precision']:.1%}")
-        print(f"Hybrid (RRF): {result['hybrid']['precision']:.1%}")
-        print(f"Improvement: {result['improvement']:+.1%}")
+        print(f"\n--- Retrieval Precision/Recall Results ---")
+        print(f"Vector-only: P@5={result['vector_only']['precision_at_5']:.1%}, "
+              f"R@5={result['vector_only']['recall_at_5']:.1%}")
+        print(f"Hybrid (RRF): P@5={result['hybrid']['precision_at_5']:.1%}, "
+              f"R@5={result['hybrid']['recall_at_5']:.1%}")
+        print(f"Improvement: P@5{result['improvement']['precision_at_5']:+.1%}, "
+              f"R@5{result['improvement']['recall_at_5']:+.1%}")
