@@ -85,6 +85,26 @@ Per agent_type, populate the matching fields:
 Steps with depends_on=[] run in parallel. Use depends_on only when a step
 genuinely needs an upstream output. Do NOT serialize independent queries.
 
+## Source-Level Query Reformulation (Layer 2)
+
+For each plan step where you set `query_source = "syllabus_rag"`, also set:
+  - `semantic_query`: a reformulated version of the user's intent suitable
+    for vector retrieval. Strip filler words, expand abbreviations, focus
+    on content terms.
+  - `query_expansion` (optional): 2–3 paraphrases if the query is short or
+    vocabulary-mismatched with likely chunk content. Omit for long, specific
+    queries.
+
+For other query sources (`canvas`, `degree_db`, `catalog_db`), do NOT set
+these fields. Their reformulation is captured by the existing typed
+`query_params` fields.
+
+Example:
+  User: "what does the AI class cover"
+  syllabus_rag step:
+    semantic_query: "course content topics covered AI track elective"
+    query_expansion: ["AI course syllabus topics", "artificial intelligence class curriculum"]
+
 ## Output format
 
 Respond with a JSON object:
@@ -427,7 +447,14 @@ async def make_plan(user_query: str, llm) -> tuple[Plan | None, str, str]:
 
 async def run_planning_agent(state: AgentState, llm) -> dict:
     """Plan a multi-step request and execute the plan as a LangGraph subgraph."""
-    user_query = state["messages"][-1].content
+    # Explicit fallback chain — make trust order visible in code review.
+    # `user_query_normalized` is set by `coref_resolver_node` on the execute
+    # branch. Flows that bypass coref (e.g., HiTL approval) leave it unset,
+    # so we fall back to the raw last user message.
+    user_query = (
+        state.get("user_query_normalized")
+        or state["messages"][-1].content
+    )
     plan, reasoning, raw = await make_plan(user_query, llm)
 
     if plan is None:
