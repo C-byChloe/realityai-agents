@@ -1,0 +1,31 @@
+# Outer safety Tier 1 — RBAC matrix.
+#
+# Maps `(user_role, action_category)` to ALLOW/DENY. The action_category
+# values match the existing intent enum produced by classify_intent
+# (action / query / planning). When the agent's intent vocabulary expands,
+# add categories here.
+#
+# Verdict semantics in safety/outer/rbac.py::check_rbac:
+#   intent in `allowed`  → ALLOW
+#   intent in `denied`   → DENY (explicit policy)
+#   intent unknown to a known role → FLAG_FOR_REVIEW (defer to later tiers)
+#   role unknown          → DENY (fail-closed)
+#
+# See docs/adr/005-outer-safety-layer.md for the design rationale.
+
+roles:
+  student:
+    allowed_action_categories:
+      - query        # transcript / catalog / syllabus reads
+      - planning     # multi-step schedule planning
+    denied_action_categories:
+      - action       # writes (grades, enrollments, assignments) — gated through HiTL workflow
+
+  instructor:
+    allowed_action_categories:
+      - query
+      - planning
+      - action       # instructors may grade / create assignments / etc.
+    denied_action_categories: []
+
+# Roles not listed above are implicitly DENIED at runtime (fail-closed).
