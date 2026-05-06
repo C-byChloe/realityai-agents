@@ -9,6 +9,7 @@ from langgraph.graph import END, StateGraph
 from agents.action_agent import run_action_agent
 from agents.planning_agent import run_planning_agent
 from agents.query_agent import run_query_agent
+from preprocessing.coref_resolver import make_coref_resolver_node
 from safety.merge import run_safety_check
 from state import AgentState, SafetyResult
 
@@ -194,18 +195,31 @@ def _route_by_agent(state: AgentState) -> str:
 # Graph Construction
 # ---------------------------------------------------------------------------
 
-def build_graph() -> StateGraph:
+def build_graph(*, coref_llm=None) -> StateGraph:
     """Build and compile the LangGraph state machine.
 
     Flow: intent_classification → agent_routing → safety_check
-          → (execute | awaiting_approval) → response_generation → END
+          → conditional:
+              execute → coref_resolver → execution
+              awaiting_approval → hitl_approval
+          → response_generation → END
+
+    `coref_resolver` runs ONLY on the execute branch — the awaiting_approval
+    branch sees the raw user message. This ordering keeps the safety
+    pipeline operating on raw input (see preprocessing/coref_resolver.py).
+
+    `coref_llm` defaults to None (uses the production ChatAnthropic client);
+    tests can pass a mock LLM via `build_graph(coref_llm=mock)`.
     """
     graph = StateGraph(AgentState)
+
+    coref_resolver = make_coref_resolver_node(llm=coref_llm)
 
     # Add nodes
     graph.add_node("intent_classification", classify_intent)
     graph.add_node("agent_routing", route_to_agent)
     graph.add_node("safety_check", safety_check)
+    graph.add_node("coref_resolver", coref_resolver)
     graph.add_node("hitl_approval", hitl_approval)
     graph.add_node("execution", execute_agent)
     graph.add_node("response_generation", generate_response)
@@ -218,10 +232,11 @@ def build_graph() -> StateGraph:
         "safety_check",
         _route_by_agent,
         {
-            "execute": "execution",
+            "execute": "coref_resolver",
             "awaiting_approval": "hitl_approval",
         },
     )
+    graph.add_edge("coref_resolver", "execution")
     graph.add_edge("hitl_approval", "response_generation")
     graph.add_edge("execution", "response_generation")
     graph.add_edge("response_generation", END)
