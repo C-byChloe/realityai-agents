@@ -12,7 +12,10 @@ artifact and a regression anchor.
 | `precision_harness.py` | Computes Precision@5 / Recall@5 for vector-only vs. hybrid (RRF) retrieval. |
 | `run.py` | CLI: `python -m evaluation.run`. Produces `baseline_metrics.json`. |
 | `e2e_runner.py` | Wraps the pytest scenario suite (`tests/test_e2e_scenarios.py`) and emits a JSON report. |
-| `baseline_metrics.json` | **Committed** snapshot of the most recent eval run. Diffs against this file flag regressions. |
+| `coref_eval_set.jsonl` + `run_coref_eval.py` | 22-case smoke eval for the coref resolver (Layer 1 query rewrite). Real LLM, requires `ANTHROPIC_API_KEY`. |
+| `outer_safety_smoke_eval.jsonl` + `run_outer_safety_eval.py` | 10-case smoke eval for the outer-safety 3-tier gate (ADR 005). Produces a per-tier confusion matrix in `outer_safety_smoke_baseline.md`. Real LLM for Tier 3, requires `ANTHROPIC_API_KEY`. |
+| `baseline_metrics.json` | **Committed** snapshot of the retrieval/solver/plan-subgraph eval run. Diffs against this file flag regressions. |
+| `outer_safety_smoke_baseline.md` | **Committed** snapshot of the outer-safety smoke eval. Read this for the per-tier attribution and defense-in-depth coverage. |
 
 ## How to run
 
