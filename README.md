@@ -103,6 +103,8 @@ implementation each-own.
 | Typed Plan DAG with parallel execution | Wired |
 | Subgraph internal-state isolation | Wired |
 | Two-layer safety + HiTL | Wired |
+| Query rewrite Layer 1 (coref resolver + regex gate) | Wired |
+| Query rewrite Layer 2 (PlanStep `semantic_query` / `query_expansion`) | Wired |
 | Hybrid retrieval (RRF + vector + keyword) | Pipeline wired; **data source is mock** |
 | ChromaDB | **Not wired** — mock keyword-overlap stub |
 | PostgreSQL (direct from agent-core) | **Not wired** — Spring Boot uses Postgres via gRPC |
