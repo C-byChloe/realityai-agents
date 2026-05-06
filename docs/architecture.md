@@ -3,9 +3,9 @@
 This document describes how the agent layer (`agent-core/`) is wired.
 It is the engineering reference; for design rationale see the ADRs in
 `docs/adr/`. For the visual topology (per-node spans, schema boundaries,
-parallel plan-DAG layout) open
-[`docs/diagrams/agent_core_architecture.html`](diagrams/agent_core_architecture.html)
-in a browser.
+parallel plan-DAG layout) see
+[the rendered diagram on GitHub Pages](https://c-bychloe.github.io/realityai-agents/diagrams/agent_core_architecture.html)
+or [the source](diagrams/agent_core_architecture.html).
 
 ## High-level flow
 

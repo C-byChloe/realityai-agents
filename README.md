@@ -59,9 +59,9 @@ graph TB
 For the full topology — plan-DAG executor, subgraph nodes,
 symbolic-vs-LLM placement — see [`docs/architecture.md`](docs/architecture.md).
 For the visual diagram (per-node spans, schema boundaries, plan-DAG
-parallel layout) open
-[`docs/diagrams/agent_core_architecture.html`](docs/diagrams/agent_core_architecture.html)
-in a browser.
+parallel layout) see
+[the rendered HTML on GitHub Pages](https://c-bychloe.github.io/realityai-agents/diagrams/agent_core_architecture.html)
+or [the source](docs/diagrams/agent_core_architecture.html).
 
 ## Cross-agent design decisions
 
