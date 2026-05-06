@@ -1,0 +1,68 @@
+# Outer safety Tier 2 — static rules.
+#
+# Rules fire on (intent, user_query_raw, user_role). Each rule's `when:`
+# block is an AND of predicates; a rule that has no predicates would
+# match everything (don't write that). Multiple rules: first match wins
+# (declaration order).
+#
+# Convention: DENY rules listed before FLAG rules so DENY dominates FLAG
+# when the same query matches multiple rules.
+#
+# Supported predicate types:
+#   intent: <exact string>
+#   query_matches_pattern: <regex, IGNORECASE>
+#   query_contains_keywords: [list of substrings, case-insensitive]
+#
+# See docs/adr/005-outer-safety-layer.md (D1: no tool surface predictor;
+# rules read intent + query + role directly) and the locked-in semantic
+# in tests/test_outer_safety_static_rules.py.
+
+rules:
+
+  # ===========================================================
+  # DENY rules
+  # ===========================================================
+
+  - id: prompt_injection_lexical
+    decision: deny
+    reason_code: prompt_injection_lexical
+    reason_human: Request contains lexical patterns associated with prompt injection.
+    when:
+      query_matches_pattern: 'ignore (previous|above|all|prior)|disregard (previous|above|all)|system override|forget (all|previous|above)'
+
+  - id: sensitive_info_request
+    decision: deny
+    reason_code: sensitive_info_request
+    reason_human: Request appears to ask for sensitive personal information.
+    when:
+      query_contains_keywords: [password, ssn, credit card, social security]
+
+  - id: bulk_action_blocked
+    decision: deny
+    reason_code: bulk_modify_pattern_detected
+    reason_human: Bulk modifications must go through the registrar workflow, not the agent.
+    when:
+      intent: action
+      query_contains_keywords: [all students, every student, entire class, bulk]
+
+  # ===========================================================
+  # FLAG_FOR_REVIEW rules
+  # ===========================================================
+
+  - id: intent_action_lexical_mismatch
+    decision: flag_for_review
+    reason_code: intent_action_lexical_mismatch
+    reason_human: >-
+      Query was classified as read-only but contains action verbs;
+      route to review before continuing.
+    when:
+      intent: query
+      query_contains_keywords: [update, change, delete, modify, enroll]
+
+  - id: bulk_query_other_users
+    decision: flag_for_review
+    reason_code: bulk_query_other_users
+    reason_human: Query references multiple users; review before disclosing data.
+    when:
+      intent: query
+      query_contains_keywords: [all students, every student, all users, other students]
