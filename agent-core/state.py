@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 from typing_extensions import TypedDict
 
 from preprocessing.schemas import RewrittenQuery
+from safety.outer.schemas import OuterSafetyResult
 from schemas.plan import PlanStep
 
 
@@ -46,8 +47,20 @@ class AgentState(TypedDict, total=False):
     # Agent routing
     selected_agent: str  # "action_agent", "query_agent", "planning_agent"
 
-    # Safety check
+    # Identity (multi-tenant scope). `user_role` is the load-bearing
+    # invariant for the outer safety layer — see ADR 005 D5. Production
+    # API gateway should populate this from the JWT role claim; until
+    # that wiring lands (Phase -1), consumers default to "student" at
+    # call sites.
+    user_role: str
+
+    # Safety check (legacy 2-layer OR-merge, retired by outer-safety Phase 4)
     safety_result: SafetyResult | None
+
+    # Outer safety result (3-tier sequential short-circuit — ADR 005).
+    # Populated by `outer_safety_check` node; consumed by the
+    # `_route_after_outer_safety` conditional edge.
+    outer_safety_result: OuterSafetyResult | None
 
     # Coref resolver output (Layer 1 of query rewrite). Populated by
     # `coref_resolver_node` between safety_check and execution. Both fields
