@@ -170,13 +170,55 @@ interval-overlap conflict detection) is deterministic Python in
 
 `safety/` runs two independent classifiers (static rules,
 dynamic LLM intent analyzer) on each turn and merges with OR semantics
-in `safety/merge.py`. A flag from either layer routes through
-`hitl_approval` instead of execution.
+in `safety/merge.py`. A flag from either layer routes the request
+through `hitl_approval` instead of going directly to execution.
 
 Safety always operates on raw user input. The coref resolver sits
 *after* `safety_check` on the execute branch precisely so that no
 LLM-rewritten content can reach the safety pipeline or the HiTL
 approval surface.
+
+## HiTL pause / resume
+
+`hitl_approval` is a real LangGraph **interrupt point**, not a sync
+stub. The graph is compiled with:
+
+```python
+graph.compile(
+    checkpointer=MemorySaver(),               # PostgresSaver in prod
+    interrupt_before=["hitl_approval"],
+)
+```
+
+Flow when safety flags a request:
+
+1. `app.ainvoke(state, config={"configurable": {"thread_id": tid}})`
+   advances through the graph until just before `hitl_approval`.
+2. The runtime checkpoints state, raises an `Interrupt`, and returns —
+   `app.ainvoke` *yields control back to the caller* without writing
+   a final response.
+3. The API gateway sees the paused state, fetches the safety reason
+   via `app.aget_state(config)`, and pushes an approval card to the
+   user over SSE.
+4. When the user approves or rejects, the gateway resumes:
+   ```python
+   app.ainvoke(Command(resume={"approved": True}), config)
+   ```
+5. `interrupt(...)` inside `hitl_approval` returns the resume payload.
+   The node sets `approval_status` and the conditional edge routes:
+   - `approved` → `coref_resolver` → `execution` → `response_generation`
+   - `rejected` → `response_generation` (with rejection message)
+
+The Python process is **not blocked while paused** — the checkpointer
+holds state, the worker that started the request can return, and any
+worker can pick up the resume call. This is the same property that
+lets the API gateway scale horizontally and survive rolling restarts
+without losing in-flight approvals.
+
+Default `MemorySaver` keeps state in-process — fine for tests and
+single-process dev. Production swaps in `PostgresSaver` (from
+`langgraph-checkpoint-postgres`) so checkpoints persist across
+restarts. The graph code does not change; only the saver does.
 
 ## What is and isn't wired up
 

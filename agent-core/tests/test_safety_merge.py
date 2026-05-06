@@ -8,7 +8,6 @@ from langchain_core.messages import AIMessage, HumanMessage
 
 from orchestrator import (
     _infer_tool_from_intent,
-    hitl_approval,
     safety_check,
 )
 from safety.merge import run_safety_check
@@ -119,34 +118,17 @@ class TestParallelExecution:
 
 
 # ---------------------------------------------------------------------------
-# HiTL Approval Node Tests
+# HiTL Approval — direct-call tests retired
 # ---------------------------------------------------------------------------
-
-
-class TestHiTLApproval:
-    async def test_returns_pending_status(self):
-        state = _make_state(
-            "Change all grades",
-            safety_result=SafetyResult(flagged=True, reason="Bulk operation"),
-        )
-        result = await hitl_approval(state)
-
-        assert result["approval_status"] == "pending"
-        assert "instructor approval" in result["response"]
-        assert "Bulk operation" in result["response"]
-
-    async def test_includes_safety_reason(self):
-        state = _make_state(
-            "Delete student",
-            safety_result=SafetyResult(
-                flagged=True,
-                reason="Static: high-risk | Dynamic: scope mismatch",
-            ),
-        )
-        result = await hitl_approval(state)
-
-        assert "Static" in result["response"]
-        assert "Dynamic" in result["response"]
+#
+# `hitl_approval` is now a real LangGraph interrupt point (it calls
+# `interrupt()` from langgraph.types). That only works inside a compiled
+# graph with a checkpointer + active thread context, so it cannot be
+# exercised by calling the function directly.
+#
+# The full pause/resume contract (graph pauses, gateway resumes via
+# `Command(resume={"approved": bool})`, conditional routing into
+# execution or rejection) is covered in `tests/test_hitl_resume.py`.
 
 
 # ---------------------------------------------------------------------------

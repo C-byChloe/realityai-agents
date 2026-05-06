@@ -278,8 +278,10 @@ class TestBuildGraph:
 
         with patch("orchestrator._get_llm", return_value=mock_llm):
             app = create_app()
+            # checkpointer requires a thread_id in config
             result = await app.ainvoke(
                 _make_state("What time does CS101 meet?"),
+                config={"configurable": {"thread_id": "test-thread-1"}},
             )
 
         assert result["intent"] == "query"

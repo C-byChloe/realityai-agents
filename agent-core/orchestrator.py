@@ -6,6 +6,9 @@ from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import HumanMessage, SystemMessage
 from langgraph.graph import END, StateGraph
 
+from langgraph.checkpoint.memory import MemorySaver
+from langgraph.types import interrupt
+
 from agents.action_agent import run_action_agent
 from agents.planning_agent import run_planning_agent
 from agents.query_agent import run_query_agent
@@ -123,23 +126,55 @@ def _infer_tool_from_intent(intent: str) -> str | None:
 # ---------------------------------------------------------------------------
 
 async def hitl_approval(state: AgentState) -> dict:
-    """Handle human-in-the-loop approval for flagged operations.
+    """Pause the graph and wait for an external approval decision.
 
-    This node persists state and waits for external approval.
-    In the current implementation, it returns a pending message.
-    The API gateway (Phase 3) will wire SSE push + approval endpoint.
+    Resume protocol (matches the architecture diagram and interview script):
+
+      1. The graph is compiled with `interrupt_before=["hitl_approval"]`
+         + a checkpointer (MemorySaver in-process; PostgresSaver in prod).
+      2. When safety flags a request, the conditional edge routes here.
+      3. LangGraph pauses BEFORE this node runs. `app.ainvoke(...)` returns
+         and the caller (API gateway) pushes an approval card to the user
+         via SSE.
+      4. When the user clicks Approve/Reject, the gateway resumes via
+            app.ainvoke(Command(resume={"approved": True}), config)
+         where `config = {"configurable": {"thread_id": ...}}`.
+      5. `interrupt()` in this node returns the resume payload. The node
+         updates `approval_status` and the conditional edge routes:
+            approved → coref_resolver → execution → response_generation
+            rejected → response_generation (with rejection message)
+
+    The Python process is not blocked while paused — checkpointed state
+    lives in the saver, the API server stays stateless, and any worker
+    can pick up the resume call.
     """
     safety = state.get("safety_result")
     reason = safety.reason if safety else "Operation flagged for review"
 
+    decision = interrupt(
+        {
+            "type": "approval_request",
+            "reason": reason,
+            "session_id": state.get("session_id", ""),
+            "user_id": state.get("user_id", ""),
+        }
+    )
+
+    approved = bool(decision and decision.get("approved"))
+    if approved:
+        return {"approval_status": "approved"}
+
     return {
+        "approval_status": "rejected",
         "response": (
-            f"This operation requires instructor approval.\n"
-            f"Reason: {reason}\n"
-            f"Status: Awaiting approval..."
+            f"Operation rejected by reviewer.\nReason: {reason}"
         ),
-        "approval_status": "pending",
     }
+
+
+def _route_after_hitl(state: AgentState) -> str:
+    """After hitl_approval resumes, branch on the decision."""
+    return "approved" if state.get("approval_status") == "approved" else "rejected"
 
 
 # ---------------------------------------------------------------------------
@@ -237,14 +272,40 @@ def build_graph(*, coref_llm=None) -> StateGraph:
         },
     )
     graph.add_edge("coref_resolver", "execution")
-    graph.add_edge("hitl_approval", "response_generation")
+    graph.add_conditional_edges(
+        "hitl_approval",
+        _route_after_hitl,
+        {
+            "approved": "coref_resolver",
+            "rejected": "response_generation",
+        },
+    )
     graph.add_edge("execution", "response_generation")
     graph.add_edge("response_generation", END)
 
     return graph
 
 
-def create_app():
-    """Create and compile the state machine graph."""
-    graph = build_graph()
-    return graph.compile()
+def create_app(*, checkpointer=None, coref_llm=None):
+    """Create and compile the state machine graph.
+
+    The graph is compiled with `interrupt_before=["hitl_approval"]` and
+    a checkpointer so the safety-flagged path can pause and be resumed
+    by an external `Command(resume={"approved": bool})`.
+
+    `checkpointer` defaults to an in-process `MemorySaver` — fine for
+    unit tests and single-process deployments. For production, pass
+    a `PostgresSaver` (from `langgraph-checkpoint-postgres`) so state
+    survives process restarts and the API server stays stateless across
+    pause/resume.
+
+    `coref_llm` is forwarded to `build_graph` for tests that inject a
+    mock LLM into the coref_resolver node.
+    """
+    if checkpointer is None:
+        checkpointer = MemorySaver()
+    graph = build_graph(coref_llm=coref_llm)
+    return graph.compile(
+        checkpointer=checkpointer,
+        interrupt_before=["hitl_approval"],
+    )

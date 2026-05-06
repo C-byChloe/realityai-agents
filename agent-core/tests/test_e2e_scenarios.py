@@ -93,7 +93,12 @@ class TestEnrollmentScenarios:
         )
         assert result["intent"] == "action"
         assert result["requires_approval"] is True
-        assert "approval" in result["response"].lower()
+        # New HiTL contract: graph pauses via interrupt() before hitl_approval
+        # runs, so `response` is not written here. The API gateway sees the
+        # paused state and pushes an approval card to the user (test_hitl_resume
+        # covers the pause/resume flow). At this stage we only assert the
+        # safety verdict was reached and the request is flagged.
+        assert result["safety_result"].flagged is True
 
     async def test_02_drop_course(self):
         result = await _run_graph(
@@ -455,13 +460,15 @@ class TestSafetyScenarios:
     """Safety layer and adversarial input scenarios."""
 
     async def test_41_change_all_grades(self):
-        """Bulk grade change should be flagged."""
+        """Bulk grade change should be flagged. Graph pauses before hitl_approval
+        (see new HiTL contract); the rejection/approval response is materialized
+        only after the resume call."""
         result = await _run_graph(
             [_intent("action"), _flagged("bulk operation: mass grade change")],
             "Change all grades in CS101 to A",
         )
         assert result["requires_approval"] is True
-        assert "approval" in result["response"].lower()
+        assert result["safety_result"].flagged is True
 
     async def test_42_privilege_escalation(self):
         """Attempting to act as admin should be flagged."""
