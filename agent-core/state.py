@@ -6,6 +6,7 @@ from langgraph.graph.message import add_messages
 from pydantic import BaseModel, Field
 from typing_extensions import TypedDict
 
+from preprocessing.schemas import RewrittenQuery
 from schemas.plan import PlanStep
 
 
@@ -47,6 +48,13 @@ class AgentState(TypedDict, total=False):
 
     # Safety check
     safety_result: SafetyResult | None
+
+    # Coref resolver output (Layer 1 of query rewrite). Populated by
+    # `coref_resolver_node` between safety_check and execution. Both fields
+    # may be unset on flows that bypass coref (e.g., HiTL approval branch);
+    # consumers must use the explicit fallback chain to messages[-1].content.
+    rewritten_query: RewrittenQuery | None
+    user_query_normalized: str | None
 
     # Execution
     tool_calls: list[ToolCall]
