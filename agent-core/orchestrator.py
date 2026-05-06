@@ -13,8 +13,9 @@ from agents.action_agent import run_action_agent
 from agents.planning_agent import run_planning_agent
 from agents.query_agent import run_query_agent
 from preprocessing.coref_resolver import make_coref_resolver_node
-from safety.merge import run_safety_check
-from state import AgentState, SafetyResult
+from safety.outer.node import outer_safety_check
+from safety.outer.schemas import SafetyDecision
+from state import AgentState
 
 # ---------------------------------------------------------------------------
 # LLM setup
@@ -90,35 +91,15 @@ async def route_to_agent(state: AgentState) -> dict:
 # Node: Safety Check (two-layer: static + dynamic, OR merge)
 # ---------------------------------------------------------------------------
 
-async def safety_check(state: AgentState) -> dict:
-    """Run two-layer safety check in parallel and merge with OR policy.
+async def outer_safety_node(state: AgentState) -> dict:
+    """Wrap `outer_safety_check` to inject the production LLM client.
 
-    Static risk classifier + dynamic LLM intent analyzer.
-    If either flags, requires_approval is set to True.
+    Tier 1 (RBAC) and Tier 2 (static rules) don't need an LLM; only
+    Tier 3 (intent analyzer) does. The LLM is constructed via
+    `_get_llm()` at request time so tests that monkeypatch `_get_llm`
+    can swap it out.
     """
-    user_msg = state["messages"][-1].content if state.get("messages") else ""
-
-    # Determine tool name from intent (pre-execution heuristic)
-    tool_name = _infer_tool_from_intent(state.get("intent", "query"))
-
-    llm = _get_llm()
-    result = await run_safety_check(user_msg, tool_name, llm)
-
-    return {
-        "safety_result": result,
-        "requires_approval": result.flagged,
-    }
-
-
-def _infer_tool_from_intent(intent: str) -> str | None:
-    """Map intent to a representative tool for static risk classification.
-
-    Action intents map to a high-risk tool; query/planning map to None
-    (low-risk, handled by dynamic analyzer).
-    """
-    if intent == "action":
-        return "grade_update"  # Representative high-risk tool
-    return None
+    return await outer_safety_check(state, _get_llm())
 
 
 # ---------------------------------------------------------------------------
@@ -148,8 +129,12 @@ async def hitl_approval(state: AgentState) -> dict:
     lives in the saver, the API server stays stateless, and any worker
     can pick up the resume call.
     """
-    safety = state.get("safety_result")
-    reason = safety.reason if safety else "Operation flagged for review"
+    outer = state.get("outer_safety_result")
+    reason = (
+        outer.final_reason_human
+        if outer and outer.final_reason_human
+        else "Operation flagged for review"
+    )
 
     decision = interrupt(
         {
@@ -214,16 +199,46 @@ async def generate_response(state: AgentState) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# Conditional edge: route by agent type
+# Node: Reject (terminal node when outer safety returns DENY)
 # ---------------------------------------------------------------------------
 
-def _route_by_agent(state: AgentState) -> str:
-    """Conditional edge to route to the correct execution path."""
-    if state.get("requires_approval") and state.get("safety_result"):
-        sr = state["safety_result"]
-        if isinstance(sr, SafetyResult) and sr.flagged:
-            return "awaiting_approval"
-    return "execute"
+async def reject_node(state: AgentState) -> dict:
+    """Materialize the rejection response from outer_safety_result.
+
+    Reached only via `_route_after_outer_safety("deny")` — i.e., when
+    one of the three safety tiers returned DENY. Writes the
+    `final_reason_human` directly into `response`; the graph then flows
+    to `response_generation` and ends.
+    """
+    outer = state.get("outer_safety_result")
+    reason = (
+        outer.final_reason_human
+        if outer and outer.final_reason_human
+        else "Request denied by safety policy."
+    )
+    return {"response": reason}
+
+
+# ---------------------------------------------------------------------------
+# Conditional edge: route by outer safety verdict
+# ---------------------------------------------------------------------------
+
+def _route_after_outer_safety(state: AgentState) -> str:
+    """Outer safety produces a tri-state verdict; map it to a graph branch.
+
+    ALLOW           → coref_resolver → execution
+    DENY            → reject_node (terminal)
+    FLAG_FOR_REVIEW → hitl_approval (LangGraph interrupt → resume)
+    """
+    outer = state.get("outer_safety_result")
+    if outer is None:
+        # Defensive — should not happen if outer_safety_node ran.
+        return "deny"
+    if outer.final_decision == SafetyDecision.ALLOW:
+        return "allow"
+    if outer.final_decision == SafetyDecision.DENY:
+        return "deny"
+    return "flag"
 
 
 # ---------------------------------------------------------------------------
@@ -233,18 +248,19 @@ def _route_by_agent(state: AgentState) -> str:
 def build_graph(*, coref_llm=None) -> StateGraph:
     """Build and compile the LangGraph state machine.
 
-    Flow: intent_classification → agent_routing → safety_check
-          → conditional:
-              execute → coref_resolver → execution
-              awaiting_approval → hitl_approval
+    Flow: intent_classification → agent_routing → outer_safety_check
+          → conditional (3-way):
+              allow → coref_resolver → execution
+              deny  → reject_node (terminal)
+              flag  → hitl_approval (LangGraph interrupt → resume)
           → response_generation → END
 
-    `coref_resolver` runs ONLY on the execute branch — the awaiting_approval
-    branch sees the raw user message. This ordering keeps the safety
-    pipeline operating on raw input (see preprocessing/coref_resolver.py).
+    Outer safety runs BEFORE coref_resolver (ADR 005 D7) — coref is an
+    LLM rewrite and must not sit between user signal and the safety
+    pipeline.
 
-    `coref_llm` defaults to None (uses the production ChatAnthropic client);
-    tests can pass a mock LLM via `build_graph(coref_llm=mock)`.
+    `coref_llm` defaults to None (uses the production ChatAnthropic
+    client); tests can pass a mock LLM via `build_graph(coref_llm=mock)`.
     """
     graph = StateGraph(AgentState)
 
@@ -253,22 +269,24 @@ def build_graph(*, coref_llm=None) -> StateGraph:
     # Add nodes
     graph.add_node("intent_classification", classify_intent)
     graph.add_node("agent_routing", route_to_agent)
-    graph.add_node("safety_check", safety_check)
+    graph.add_node("outer_safety_check", outer_safety_node)
     graph.add_node("coref_resolver", coref_resolver)
     graph.add_node("hitl_approval", hitl_approval)
+    graph.add_node("reject_node", reject_node)
     graph.add_node("execution", execute_agent)
     graph.add_node("response_generation", generate_response)
 
     # Add edges
     graph.set_entry_point("intent_classification")
     graph.add_edge("intent_classification", "agent_routing")
-    graph.add_edge("agent_routing", "safety_check")
+    graph.add_edge("agent_routing", "outer_safety_check")
     graph.add_conditional_edges(
-        "safety_check",
-        _route_by_agent,
+        "outer_safety_check",
+        _route_after_outer_safety,
         {
-            "execute": "coref_resolver",
-            "awaiting_approval": "hitl_approval",
+            "allow": "coref_resolver",
+            "deny": "reject_node",
+            "flag": "hitl_approval",
         },
     )
     graph.add_edge("coref_resolver", "execution")
@@ -280,6 +298,7 @@ def build_graph(*, coref_llm=None) -> StateGraph:
             "rejected": "response_generation",
         },
     )
+    graph.add_edge("reject_node", "response_generation")
     graph.add_edge("execution", "response_generation")
     graph.add_edge("response_generation", END)
 

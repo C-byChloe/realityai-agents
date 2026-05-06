@@ -25,6 +25,7 @@ from langchain_core.messages import AIMessage, HumanMessage
 from langgraph.types import Command
 
 from orchestrator import create_app
+from safety.outer.schemas import SafetyDecision
 
 
 # ---------------------------------------------------------------------------
@@ -38,7 +39,10 @@ def _state(msg: str) -> dict:
         "intent": "",
         "intent_confidence": 0.0,
         "selected_agent": "",
-        "safety_result": None,
+        # role=instructor so RBAC allows action; Tier 3 below produces the
+        # FLAG verdict that triggers the HiTL pause.
+        "user_role": "instructor",
+        "outer_safety_result": None,
         "tool_calls": [],
         "response": "",
         "user_id": "u1",
@@ -49,20 +53,22 @@ def _state(msg: str) -> dict:
 
 
 def _flagged_action_llm() -> AsyncMock:
-    """LLM script that classifies as action, flags via dynamic safety."""
+    """LLM script: intent classifier → outer-safety Tier 3 returns FLAG →
+    (graph pauses) → resume → action agent route_query.
+    """
     intent = AIMessage(content=json.dumps({"intent": "action", "confidence": 0.95}))
-    flagged_safety = AIMessage(content=json.dumps({
-        "flagged": True,
+    tier3_flag = AIMessage(content=json.dumps({
+        "decision": "flag_for_review",
+        "confidence": 0.85,
         "reason": "high-risk write operation requires confirmation",
     }))
-    # Once resumed and routed through to action agent, it picks a tool
     action_response = AIMessage(content=json.dumps({
         "tool": "enrollment_modify",
         "arguments": {"student_id": "S001", "course_id": "CS201", "action": "add"},
         "confirmation": "Enroll in CS201",
     }))
     mock = AsyncMock()
-    mock.ainvoke.side_effect = [intent, flagged_safety, action_response, action_response]
+    mock.ainvoke.side_effect = [intent, tier3_flag, action_response, action_response]
     return mock
 
 
@@ -84,7 +90,7 @@ async def test_flagged_request_pauses_before_hitl_approval():
         result = await app.ainvoke(_state("Enroll me in CS201"), config=cfg)
 
     # The graph paused — final response is not generated yet.
-    assert result["safety_result"].flagged is True
+    assert result["outer_safety_result"].final_decision == SafetyDecision.FLAG_FOR_REVIEW
     assert result["requires_approval"] is True
     # No response from response_generation has been written.
     assert result["response"] == ""

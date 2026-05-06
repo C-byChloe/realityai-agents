@@ -24,32 +24,30 @@ from preprocessing.schemas import RewrittenQuery
 
 def _mock_orchestrator_llm() -> MagicMock:
     """Mock for orchestrator._get_llm — returns canned JSON for the
-    intent classifier, safety check, and execute_agent paths.
-
-    All three call ainvoke; we satisfy each with permissive responses
-    that produce a clean execute branch.
+    three LLM call sites along the ALLOW path:
+      1. intent classifier
+      2. outer safety Tier 3 (LLM intent analyzer)
+      3. agent (query_agent's route_query)
     """
     llm = MagicMock()
-    # Default: act as the intent classifier — short JSON
     intent_response = AIMessage(content=json.dumps({"intent": "query", "confidence": 0.9}))
-    safety_response = AIMessage(content=json.dumps({"flagged": False, "reason": None}))
+    analyzer_ok = AIMessage(content=json.dumps({
+        "decision": "allow", "confidence": 0.92, "reason": "ok",
+    }))
     query_response = AIMessage(content=json.dumps({
         "tool": "course_lookup",
         "arguments": {"course_id": "CS101"},
         "query_type": "deterministic",
     }))
-    # Cycle through responses by call count
     state = {"calls": 0}
 
     async def ainvoke(messages, **kwargs):
         i = state["calls"]
         state["calls"] += 1
-        # First call is intent classifier; second is safety dynamic analyzer;
-        # third+ is the agent's own LLM. Return permissive shapes for each.
         if i == 0:
             return intent_response
         if i == 1:
-            return safety_response
+            return analyzer_ok
         return query_response
 
     llm.ainvoke = ainvoke
@@ -78,7 +76,8 @@ def _initial_state(messages: list) -> dict:
         "intent": "",
         "intent_confidence": 0.0,
         "selected_agent": "",
-        "safety_result": None,
+        "user_role": "instructor",  # bypass RBAC for action-class routing
+        "outer_safety_result": None,
         "tool_calls": [],
         "response": "",
         "user_id": "u1",
