@@ -2,7 +2,10 @@
 
 This document describes how the agent layer (`agent-core/`) is wired.
 It is the engineering reference; for design rationale see the ADRs in
-`docs/adr/`.
+`docs/adr/`. For the visual topology (per-node spans, schema boundaries,
+parallel plan-DAG layout) open
+[`docs/diagrams/agent_core_architecture.html`](diagrams/agent_core_architecture.html)
+in a browser.
 
 ## High-level flow
 
