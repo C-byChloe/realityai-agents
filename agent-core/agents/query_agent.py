@@ -198,20 +198,52 @@ def _query_catalog_db(params: dict) -> list[CourseSection]:
 
 
 def _query_syllabus_rag(params: dict) -> list[SyllabusChunk]:
+    """Retrieve syllabus chunks for a course.
+
+    Honors Layer 2 reformulation when present:
+      - `_semantic_query` (set by run_query_step from step.semantic_query):
+        used as the retrieval query instead of the default
+        "<course_id> syllabus <topic>" string.
+      - `_query_expansion` (set from step.query_expansion): each paraphrase
+        runs as a separate retrieval; results are deduped by chunk_id with
+        the highest score per duplicate kept.
+
+    Falls back to the legacy default-query behavior when neither is set,
+    so the standalone `syllabus_retrieve` tool path is unaffected.
+    """
     from retrieval.hybrid import hybrid_retrieve
 
     course_id = params.get("course_id", "")
     topic = params.get("topic", "")
-    query = f"{course_id} syllabus {topic}".strip()
-    docs = hybrid_retrieve(query, course_id=course_id.upper() if course_id else None, top_n=5)
+    course_filter = course_id.upper() if course_id else None
+
+    primary_query = (
+        params.get("_semantic_query")
+        or f"{course_id} syllabus {topic}".strip()
+    )
+    expansion = params.get("_query_expansion") or []
+
+    queries_to_run: list[str] = [primary_query, *expansion]
+
+    # Run each query, then dedupe by doc_id (keep highest score).
+    by_id: dict[str, tuple[Any, float]] = {}
+    for q in queries_to_run:
+        for d in hybrid_retrieve(q, course_id=course_filter, top_n=5):
+            doc_id = getattr(d, "doc_id", None) or id(d)
+            score = float(getattr(d, "score", 0.0))
+            existing = by_id.get(doc_id)
+            if existing is None or score > existing[1]:
+                by_id[doc_id] = (d, score)
+
+    deduped = sorted(by_id.values(), key=lambda kv: kv[1], reverse=True)
     return [
         SyllabusChunk(
             chunk_id=getattr(d, "doc_id", f"chunk-{i}"),
             course_id=course_id.upper() if course_id else "",
             content=d.content,
-            score=getattr(d, "score", 0.0),
+            score=score,
         )
-        for i, d in enumerate(docs)
+        for i, (d, score) in enumerate(deduped)
     ]
 
 
@@ -238,6 +270,16 @@ def run_query_step(step: PlanStep, step_outputs: dict[int, Any]) -> Any:
         raise ValueError(f"step {step.step_id}: unknown query_source {step.query_source}")
 
     params = _resolve_step_refs(step.query_params, step_outputs)
+
+    # Layer 2 reformulation — only forward semantic_query / query_expansion
+    # to the syllabus_rag handler. Other sources ignore these fields by
+    # design (see ADR: Decision C in the query rewrite plan).
+    if step.query_source is QuerySource.SYLLABUS_RAG:
+        if step.semantic_query is not None:
+            params["_semantic_query"] = step.semantic_query
+        if step.query_expansion is not None:
+            params["_query_expansion"] = step.query_expansion
+
     return handler(params)
 
 
