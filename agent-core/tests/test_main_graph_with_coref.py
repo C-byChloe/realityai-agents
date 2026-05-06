@@ -35,8 +35,8 @@ def _mock_orchestrator_llm() -> MagicMock:
         "decision": "allow", "confidence": 0.92, "reason": "ok",
     }))
     query_response = AIMessage(content=json.dumps({
-        "tool": "course_lookup",
-        "arguments": {"course_id": "CS101"},
+        "source": "catalog_db",
+        "params": {"term": "F25", "course_codes": ["CS101"]},
         "query_type": "deterministic",
     }))
     state = {"calls": 0}

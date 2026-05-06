@@ -2,10 +2,15 @@
 
 These tests assert the architectural property from Talking Point 2:
   - The Query Agent is a compiled `StateGraph`, not a plain async function
-  - Internal working-memory fields (route_decision, raw_tool_result,
+  - Internal working-memory fields (route_decision, raw_typed_result,
     execution_error, etc.) never appear in the boundary `QueryAgentOutput`
   - The subgraph has 3 internal nodes (route / execute / format) so
     LangSmith shows a real internal flow, not a single opaque span
+
+Post Q-align: the LLM picks a `QuerySource` (canvas/degree_db/catalog_db/
+syllabus_rag) — same vocabulary the plan path uses. The mocks below
+emit `{"source", "params", "query_type"}` not the legacy `{"tool",
+"arguments"}` shape.
 """
 
 import json
@@ -69,12 +74,12 @@ async def test_invoke_returns_typed_output_only():
     with internal keys.
     """
     llm = _mock_llm(json.dumps({
-        "tool": "course_lookup",
-        "arguments": {"course_id": "CS101"},
+        "source": "canvas",
+        "params": {"user_id": "u1"},
         "query_type": "deterministic",
     }))
     out = await invoke_query_subgraph(
-        QueryAgentInput(user_message="Tell me about CS101", user_id="u1", session_id="s1"),
+        QueryAgentInput(user_message="Show me my transcript", user_id="u1", session_id="s1"),
         llm,
     )
 
@@ -84,7 +89,7 @@ async def test_invoke_returns_typed_output_only():
     leaked = QUERY_INTERNAL_ONLY_KEYS & set(dumped.keys())
     assert not leaked, f"internal keys present in boundary dump: {leaked}"
     assert out.success is True
-    assert out.selected_tool == "course_lookup"
+    assert out.selected_source == "canvas"
 
 
 async def test_internal_state_visible_inside_subgraph_only():
@@ -93,8 +98,8 @@ async def test_internal_state_visible_inside_subgraph_only():
     adapter boundary by `invoke_query_subgraph`.
     """
     llm = _mock_llm(json.dumps({
-        "tool": "course_lookup",
-        "arguments": {"course_id": "CS101"},
+        "source": "canvas",
+        "params": {"user_id": "u1"},
         "query_type": "deterministic",
     }))
     compiled = compile_query_agent(llm)
@@ -103,14 +108,14 @@ async def test_internal_state_visible_inside_subgraph_only():
     # These DO appear inside the subgraph (proving isolation is real, not
     # a side effect of fields not existing).
     assert "route_decision" in internal
-    assert "raw_tool_result" in internal
+    assert "raw_typed_result" in internal
 
 
-async def test_unknown_tool_does_not_leak_internal_error():
+async def test_unknown_source_does_not_leak_internal_error():
     """Even on failure path, boundary output has the strict shape."""
     llm = _mock_llm(json.dumps({
-        "tool": "nonexistent_tool",
-        "arguments": {},
+        "source": "nonexistent_source",
+        "params": {},
         "query_type": "deterministic",
     }))
     out = await invoke_query_subgraph(
@@ -118,6 +123,6 @@ async def test_unknown_tool_does_not_leak_internal_error():
     )
     assert isinstance(out, QueryAgentOutput)
     assert out.success is False
-    assert "Unknown tool" in out.response
+    assert "Unknown data source" in out.response
     # Confirm the internal `execution_error` isn't dragged into the dump
     assert "execution_error" not in out.model_dump()

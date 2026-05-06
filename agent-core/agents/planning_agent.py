@@ -32,10 +32,10 @@ from pydantic import ValidationError
 from typing_extensions import TypedDict
 
 from agents.action_agent import ACTION_TOOLS, run_action_step
-from agents.query_agent import QUERY_TOOLS, run_query_step
+from agents.query_agent import run_query_step
 from reasoning.gap_analysis import compute_unsatisfied
 from reasoning.solver import ConstraintSolver
-from schemas.plan import AgentType, Plan, PlanStep
+from schemas.plan import AgentType, Plan, PlanStep, QuerySource
 from schemas.query_outputs import (
     CourseSection,
     DegreeProgram,
@@ -116,11 +116,12 @@ Respond with a JSON object:
 
 
 # ---------------------------------------------------------------------------
-# Combined registry — kept for back-compat with consumers that import this
+# Registries exposed for trace + tooling. Query dispatch is driven by the
+# `QuerySource` enum (typed, plan-aligned); action dispatch by tool name.
 # ---------------------------------------------------------------------------
 
 
-PLANNING_TOOLS = {**QUERY_TOOLS, **ACTION_TOOLS}
+QUERY_SOURCES: list[QuerySource] = list(QuerySource)
 
 
 # ---------------------------------------------------------------------------

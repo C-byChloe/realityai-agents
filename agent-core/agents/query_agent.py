@@ -1,18 +1,27 @@
 """Query Agent — read operations and tutoring.
 
-Two entry points:
+Two dispatch flows, **one shared data layer**:
 
-1. `run_query_agent(state, llm)` — adapter that invokes a compiled
-   subgraph (3-node internal flow: route → execute → format). Internal
-   state is hidden behind `QueryAgentOutput` at the boundary. Used by
-   the intent router for one-shot questions.
+1. `run_query_agent(state, llm)` — standalone path used by the intent
+   router for simple one-shot questions ("What time does CS101 meet?").
+   A 3-node compiled subgraph (route → execute → format) where the LLM
+   picks a single `QuerySource` and the response is formatted as a
+   string for the user. Cheap: 1 LLM call, no DAG.
 
-2. `run_query_step(step, step_outputs)` — plan-driven path called by the
-   planning DAG executor. Receives a typed `PlanStep` (with `query_source`
-   + `query_params` already locked in by make_plan) and returns a typed
-   Pydantic object — `StudentTranscript`, `DegreeProgram`,
-   `list[CourseSection]`, or `list[SyllabusChunk]`. Talking Point 2: the
-   output schema collapses re-parse hallucinations.
+2. `run_query_step(step, step_outputs)` — plan-driven path called by
+   the planning DAG executor. Receives a typed `PlanStep` (with
+   `query_source` + `query_params` already locked in by `make_plan`)
+   and returns the raw typed Pydantic object so downstream reasoning /
+   solver steps can operate on it. Used for multi-step requests.
+
+Both paths share:
+  - The same `QuerySource` enum (canvas / degree_db / catalog_db / syllabus_rag)
+  - The same `_SOURCE_HANDLERS` registry
+  - The same typed mock data (`_MOCK_TRANSCRIPTS`, `_MOCK_DEGREE_PROGRAMS`,
+    `_MOCK_CATALOG`)
+
+Dispatch flow differs by complexity (single-shot vs DAG), but the data
+contract is consistent. See ADR notes in docs/architecture.md.
 """
 
 from __future__ import annotations
@@ -22,7 +31,6 @@ from datetime import time
 from typing import Any
 
 from langchain_core.messages import HumanMessage, SystemMessage
-from langchain_core.tools import tool
 from langgraph.graph import END, START, StateGraph
 
 from agents.subgraph_states import (
@@ -51,35 +59,44 @@ QUERY_AGENT_SYSTEM_PROMPT = """\
 You are the Query Agent for a university course management system.
 
 ## Identity
-You handle all READ operations: looking up course information, schedules, syllabi,
-and answering academic questions. You also provide tutoring help using course materials.
-You do NOT modify any data — that is the Action Agent's job.
-You do NOT plan multi-step workflows — that is the Planning Agent's job.
+You handle one-shot READ operations: a single user question gets routed
+to one data source, and the result is formatted as a natural-language
+response. You do NOT modify data (Action Agent), and you do NOT plan
+multi-step workflows (Planning Agent).
 
-## Retrieval Instructions
-- Always use the appropriate tool to look up information before answering.
-- If the query is about a specific course, use course_lookup with the course ID.
-- If the query is about schedules or timing, use schedule_query.
-- If the query is about course content or materials, use syllabus_retrieve.
-- For tutoring questions, use syllabus_retrieve to get relevant materials, then
-  generate an educational response based on the retrieved context.
+## Available data sources
+Pick exactly ONE source per request. Each returns typed data; the
+agent's executor formats it for the user.
 
-## Available Tools
-- course_lookup: Look up course information (title, instructor, credits, description)
-- schedule_query: Query class schedules (meeting times, rooms, days)
-- syllabus_retrieve: Retrieve syllabus and course materials for a course
+  canvas        — student transcript: completed courses, grades, credits
+                  Required params: {"user_id": "<student id>"}
+  degree_db     — degree program: requirement tree for a major/track
+                  Required params: {"major": "<str>", "cohort": "<year-year>"}
+                  Optional: {"track": "<str>"}
+  catalog_db    — next-semester course catalog: sections, meeting times, prereqs
+                  Required params: {"term": "<str>"}
+                  Optional: {"course_codes": ["..."], "days_excluded": ["F", ...]}
+  syllabus_rag  — syllabus content (semantic search over course materials)
+                  Required params: {"course_id": "<id>"}
+                  Optional: {"topic": "<str>"}
+
+## Routing guidance
+- "what's my GPA / completed courses / transcript"          → canvas
+- "what does AI track require / what are the prereqs for X" → degree_db
+- "when does CS101 meet / what's available next semester"   → catalog_db
+- "explain X / how does Y work / what does the syllabus say"→ syllabus_rag
 
 ## Output Format
-Respond with a JSON object:
+Respond with ONLY a JSON object — no other text:
 {
-  "tool": "<tool_name>",
-  "arguments": { ... },
-  "query_type": "deterministic" | "tutoring"
+  "source": "canvas|degree_db|catalog_db|syllabus_rag",
+  "params": { ... source-specific params ... },
+  "query_type": "deterministic|tutoring"
 }
 
 The query_type field indicates whether the response can be cached:
-- "deterministic": factual lookups (course info, schedules) — cacheable
-- "tutoring": educational explanations, Q&A — not cacheable
+- "deterministic": factual lookups (transcript, catalog) — cacheable
+- "tutoring": semantic Q&A from syllabus — not cacheable
 """
 
 
@@ -141,6 +158,20 @@ def _mt(days: list[str], h1: int, m1: int, h2: int, m2: int) -> MeetingTime:
 
 
 _MOCK_CATALOG: list[CourseSection] = [
+    # F25 sections — current-semester catalog (used by tests asking
+    # about CS101 / CS201 / MATH200, which previously lived in the
+    # legacy @tool internal mocks)
+    CourseSection(course_code="CS101", section="001", term="F25", credits=3,
+                  instructor="Dr. Smith",
+                  meetings=[_mt(["M", "W", "F"], 10, 0, 10, 50)]),
+    CourseSection(course_code="CS201", section="001", term="F25", credits=3,
+                  instructor="Dr. Johnson",
+                  meetings=[_mt(["T", "R"], 14, 0, 15, 15)]),
+    CourseSection(course_code="MATH200", section="001", term="F25", credits=4,
+                  instructor="Dr. Lee",
+                  meetings=[_mt(["M", "W"], 13, 0, 14, 15)]),
+
+    # S26 sections — next-semester offerings (used by avoid-Fridays plan)
     CourseSection(course_code="CS401", section="001", term="S26", credits=3,
                   instructor="Dr. Lee", meetings=[_mt(["T", "R"], 11, 40, 12, 55)]),
     CourseSection(course_code="CS402", section="001", term="S26", credits=3,
@@ -302,84 +333,12 @@ def _resolve_step_refs(params: dict, step_outputs: dict[int, Any]) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# Standalone tools (LLM-driven path, kept for back-compat with intent router)
-# ---------------------------------------------------------------------------
-
-
-@tool
-def course_lookup(course_id: str) -> dict:
-    """Look up course information by course ID."""
-    catalog_lookup = {c.course_code: c for c in _MOCK_CATALOG}
-    legacy = {
-        "CS101": {"title": "Introduction to Computer Science", "instructor": "Dr. Smith",
-                  "credits": 3, "description": "Fundamentals of programming and computational thinking."},
-        "CS201": {"title": "Data Structures and Algorithms", "instructor": "Dr. Johnson",
-                  "credits": 3, "description": "Arrays, linked lists, trees, graphs, sorting, and searching."},
-        "MATH200": {"title": "Linear Algebra", "instructor": "Dr. Lee",
-                    "credits": 4, "description": "Vectors, matrices, linear transformations, eigenvalues."},
-    }
-    cid = course_id.upper()
-    if cid in legacy:
-        return {"success": True, "course_id": cid, **legacy[cid]}
-    if cid in catalog_lookup:
-        c = catalog_lookup[cid]
-        return {
-            "success": True, "course_id": cid,
-            "title": cid, "instructor": c.instructor, "credits": c.credits,
-            "description": f"{cid} (term {c.term})",
-        }
-    return {"success": False, "message": f"Course {course_id} not found."}
-
-
-@tool
-def schedule_query(course_id: str) -> dict:
-    """Query class schedule for a course."""
-    legacy = {
-        "CS101": {"days": "Mon/Wed/Fri", "time": "10:00-10:50 AM", "room": "Science Hall 201"},
-        "CS201": {"days": "Tue/Thu", "time": "2:00-3:15 PM", "room": "Engineering 305"},
-        "MATH200": {"days": "Mon/Wed", "time": "1:00-2:15 PM", "room": "Math Building 110"},
-    }
-    cid = course_id.upper()
-    if cid in legacy:
-        return {"success": True, "course_id": cid, **legacy[cid]}
-    catalog_lookup = {c.course_code: c for c in _MOCK_CATALOG}
-    if cid in catalog_lookup:
-        c = catalog_lookup[cid]
-        m = c.meetings[0] if c.meetings else None
-        if m:
-            return {
-                "success": True, "course_id": cid,
-                "days": "/".join(m.days),
-                "time": f"{m.start.strftime('%H:%M')}-{m.end.strftime('%H:%M')}",
-                "room": "TBD",
-            }
-    return {"success": False, "message": f"Schedule for {course_id} not found."}
-
-
-@tool
-def syllabus_retrieve(course_id: str, topic: str = "") -> dict:
-    """Retrieve syllabus and course materials using hybrid retrieval."""
-    chunks = _query_syllabus_rag({"course_id": course_id, "topic": topic})
-    if not chunks:
-        return {"success": False, "message": f"Syllabus for {course_id} not found."}
-    return {
-        "success": True,
-        "course_id": course_id.upper(),
-        "topics": [ch.content for ch in chunks],
-        "materials": f"Retrieved {len(chunks)} documents via hybrid retrieval.",
-    }
-
-
-QUERY_TOOLS = {
-    "course_lookup": course_lookup,
-    "schedule_query": schedule_query,
-    "syllabus_retrieve": syllabus_retrieve,
-}
-
-
-# ---------------------------------------------------------------------------
 # Compiled subgraph — 3 internal nodes, internal state hidden at boundary
 # ---------------------------------------------------------------------------
+# The subgraph dispatches to the SAME _SOURCE_HANDLERS used by the
+# plan-driven path. Difference vs plan path: standalone is single-shot
+# (LLM picks ONE source and returns a string to the user), plan is DAG
+# (multiple steps feed each other typed Pydantic objects).
 
 
 def _make_route_node(llm):
@@ -393,61 +352,117 @@ def _make_route_node(llm):
         try:
             decision = json.loads(raw)
         except (json.JSONDecodeError, AttributeError):
-            # No structured plan — short-circuit with the raw text as response.
+            # Non-JSON output — short-circuit with the raw text as the response.
             return {
                 "route_decision": {},
-                "selected_tool": "",
-                "tool_arguments": {},
+                "selected_source": "",
+                "source_params": {},
                 "query_type": "",
                 "response_text": raw,
                 "success": True,
             }
         return {
             "route_decision": decision,
-            "selected_tool": decision.get("tool", ""),
-            "tool_arguments": decision.get("arguments", {}),
+            "selected_source": decision.get("source", ""),
+            "source_params": decision.get("params", {}) or {},
             "query_type": decision.get("query_type", ""),
         }
     return route_query
 
 
 async def _execute_query_tool(state: QueryAgentInternalState) -> dict:
-    # Already short-circuited by route?
-    if state.get("response_text") and not state.get("selected_tool"):
+    """Dispatch via _SOURCE_HANDLERS — same registry the plan path uses."""
+    # Already short-circuited by route_query (non-JSON LLM output)?
+    if state.get("response_text") and not state.get("selected_source"):
         return {}
 
-    tool_name = state.get("selected_tool", "")
-    args = state.get("tool_arguments", {})
-    tool_func = QUERY_TOOLS.get(tool_name)
-
-    if tool_func is None:
-        return {
-            "raw_tool_result": {"success": False, "message": f"Unknown tool: {tool_name}"},
-            "execution_error": f"Unknown tool: {tool_name}",
-            "success": False,
-            "response_text": f"Unknown tool: {tool_name}",
-        }
+    source_name = state.get("selected_source", "")
+    params = state.get("source_params", {}) or {}
 
     try:
-        result = tool_func.invoke(args)
-        return {"raw_tool_result": result, "success": bool(result.get("success", False))}
+        source_enum = QuerySource(source_name)
+    except ValueError:
+        return {
+            "execution_error": f"Unknown source: {source_name}",
+            "success": False,
+            "response_text": f"Unknown data source: {source_name}",
+        }
+
+    handler = _SOURCE_HANDLERS[source_enum]
+    try:
+        typed_result = handler(params)
+        return {"raw_typed_result": typed_result, "success": True}
     except Exception as e:
         return {
-            "raw_tool_result": {"success": False, "message": str(e)},
             "execution_error": str(e),
             "success": False,
-            "response_text": f"Retrieval failed: {e}",
+            "response_text": f"Query failed: {e}",
         }
 
 
 async def _format_query_response(state: QueryAgentInternalState) -> dict:
-    # Already produced by an earlier node?
+    """Format the typed Pydantic result into a user-facing string."""
     if state.get("response_text"):
         return {}
-    raw = state.get("raw_tool_result", {})
-    if raw.get("success"):
-        return {"response_text": _format_tool_result(state.get("selected_tool", ""), raw)}
-    return {"response_text": raw.get("message", "No results found.")}
+    typed = state.get("raw_typed_result")
+    if typed is None:
+        return {"response_text": "No results found."}
+    return {"response_text": _format_typed_result(typed)}
+
+
+def _format_typed_result(result: Any) -> str:
+    """Render any of the 4 typed source outputs as a human-readable string."""
+    if isinstance(result, StudentTranscript):
+        if not result.entries:
+            return "No transcript entries on file."
+        lines = [f"Transcript for {result.user_id} ({result.total_credits} credits earned):"]
+        for e in result.entries:
+            status = "✓" if e.is_passed else "✗"
+            lines.append(f"  {status} {e.course_code}  grade={e.grade}  credits={e.credits}  ({e.term})")
+        return "\n".join(lines)
+
+    if isinstance(result, DegreeProgram):
+        track = f", track={result.track}" if result.track else ""
+        header = f"Degree program: {result.major}{track}, cohort {result.cohort}"
+        body = _format_requirement_node(result.root, indent=0)
+        return f"{header}\n{body}"
+
+    if isinstance(result, list):
+        if not result:
+            return "No results found."
+        first = result[0]
+        if isinstance(first, CourseSection):
+            lines = [f"Found {len(result)} section(s):"]
+            for c in result:
+                meets = "; ".join(
+                    f"{'/'.join(m.days)} {m.start.strftime('%H:%M')}-{m.end.strftime('%H:%M')}"
+                    for m in c.meetings
+                ) or "TBA"
+                lines.append(
+                    f"  {c.course_code} sec {c.section} ({c.term}) — "
+                    f"{c.credits}cr, {c.instructor or 'TBA'}, meets {meets}"
+                )
+            return "\n".join(lines)
+        if isinstance(first, SyllabusChunk):
+            lines = [f"Retrieved {len(result)} syllabus excerpt(s):"]
+            for ch in result:
+                lines.append(f"  [{ch.course_id}] {ch.content}")
+            return "\n".join(lines)
+
+    # Fallback — should not happen if handlers stay aligned with formatters
+    return json.dumps(result, default=str, indent=2)
+
+
+def _format_requirement_node(node: RequirementNode, indent: int) -> str:
+    pad = "  " * indent
+    if node.kind == "leaf":
+        pool = ", ".join(node.pool)
+        return f"{pad}- {node.name or node.requirement_id}: need {node.need} of [{pool}]"
+    op = "ALL OF" if node.kind == "and" else "ANY OF"
+    lines = [f"{pad}{op} ({node.name or node.requirement_id}):"]
+    for child in node.children:
+        lines.append(_format_requirement_node(child, indent + 1))
+    return "\n".join(lines)
 
 
 def compile_query_agent(llm):
@@ -479,22 +494,23 @@ async def invoke_query_subgraph(inp: QueryAgentInput, llm) -> QueryAgentOutput:
     return QueryAgentOutput(
         response=final.get("response_text", ""),
         success=bool(final.get("success", False)),
-        selected_tool=final.get("selected_tool", "") or "",
+        selected_source=final.get("selected_source", "") or "",
         query_type=final.get("query_type", "") or "",
     )
 
 
 # ---------------------------------------------------------------------------
-# Orchestrator-facing adapter — preserves the old return shape
+# Orchestrator-facing adapter — preserves the {response, tool_calls} shape
+# expected by AgentState consumers
 # ---------------------------------------------------------------------------
 
 
 async def run_query_agent(state: AgentState, llm) -> dict:
     """Adapter: invokes the compiled subgraph and reshapes for AgentState.
 
-    The orchestrator (and existing tests) expect `{response, tool_calls}`.
-    This wrapper rebuilds that shape from the typed `QueryAgentOutput`,
-    using the adapter as the single source of truth for the boundary.
+    Trace fidelity: `tool_calls` carries one `ToolCall` named after the
+    selected `QuerySource` (e.g., `query/canvas`) so downstream trace
+    consumers see a uniform shape with the plan-path's `_step_label`.
     """
     user_msg = state["messages"][-1].content if state.get("messages") else ""
     output = await invoke_query_subgraph(
@@ -506,36 +522,17 @@ async def run_query_agent(state: AgentState, llm) -> dict:
         llm,
     )
 
-    if not output.selected_tool:
-        # No tool was invoked (LLM returned non-JSON). Synthesize an empty trace.
+    if not output.selected_source:
+        # LLM emitted non-JSON — no source dispatched. Synthesize an empty trace.
         return {"response": output.response, "tool_calls": []}
 
-    # Rebuild a ToolCall trace from the boundary output. We re-run nothing —
-    # the subgraph already executed; this just reconstructs the visible record.
-    # raw_tool_result is internal-only, so we synthesize a success/failure
-    # marker from the typed boundary fields.
     return {
         "response": output.response,
         "tool_calls": [ToolCall(
-            tool_name=output.selected_tool,
+            tool_name=f"query/{output.selected_source}",
             arguments={},
             result=None,
             success=output.success,
-            error=None if output.success else "Unknown tool" if "Unknown tool" in output.response else None,
+            error=None if output.success else output.response,
         )],
     }
-
-
-def _format_tool_result(tool_name: str, result: dict) -> str:
-    if tool_name == "course_lookup":
-        return (f"{result['title']} ({result['course_id']})\n"
-                f"Instructor: {result['instructor']}\n"
-                f"Credits: {result['credits']}\n"
-                f"{result['description']}")
-    elif tool_name == "schedule_query":
-        return (f"{result['course_id']} meets {result['days']} at {result['time']}\n"
-                f"Room: {result['room']}")
-    elif tool_name == "syllabus_retrieve":
-        topics = "\n".join(f"  - {t}" for t in result.get("topics", []))
-        return f"{result['course_id']} Syllabus:\n{topics}\n{result.get('materials', '')}"
-    return json.dumps(result, indent=2)

@@ -6,7 +6,9 @@ from unittest.mock import AsyncMock
 import pytest
 from langchain_core.messages import AIMessage, HumanMessage
 
-from agents.planning_agent import PLANNING_TOOLS, run_planning_agent
+from agents.action_agent import ACTION_TOOLS
+from agents.planning_agent import QUERY_SOURCES, run_planning_agent
+from schemas.plan import QuerySource
 from state import AgentState
 
 
@@ -192,20 +194,29 @@ class TestErrorHandling:
 
 
 # ---------------------------------------------------------------------------
-# Tool registry — kept for back-compat
+# Dispatch registries — query (4 typed sources) + action (3 tools)
 # ---------------------------------------------------------------------------
 
 
-class TestToolRegistry:
-    def test_has_all_query_tools(self):
-        assert "course_lookup" in PLANNING_TOOLS
-        assert "schedule_query" in PLANNING_TOOLS
-        assert "syllabus_retrieve" in PLANNING_TOOLS
+class TestDispatchRegistries:
+    """Locks the planning agent's known dispatch surface.
 
-    def test_has_all_action_tools(self):
-        assert "grade_update" in PLANNING_TOOLS
-        assert "enrollment_modify" in PLANNING_TOOLS
-        assert "assignment_create" in PLANNING_TOOLS
+    Query dispatch is by typed `QuerySource` enum; action dispatch is by
+    tool name in `ACTION_TOOLS`. Both registries are shared with the
+    standalone agents — single source of truth for what the planner can
+    actually emit.
+    """
 
-    def test_total_tool_count(self):
-        assert len(PLANNING_TOOLS) == 6
+    def test_all_four_query_sources_registered(self):
+        assert set(QUERY_SOURCES) == {
+            QuerySource.CANVAS,
+            QuerySource.DEGREE_DB,
+            QuerySource.CATALOG_DB,
+            QuerySource.SYLLABUS_RAG,
+        }
+
+    def test_all_three_action_tools_registered(self):
+        assert "grade_update" in ACTION_TOOLS
+        assert "enrollment_modify" in ACTION_TOOLS
+        assert "assignment_create" in ACTION_TOOLS
+        assert len(ACTION_TOOLS) == 3

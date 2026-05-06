@@ -291,9 +291,9 @@ class TestExecuteAgent:
 
     async def test_routes_query_agent(self):
         query_response = json.dumps({
-            "tool": "course_lookup",
-            "arguments": {"course_id": "CS101"},
-            "query_type": "deterministic",
+            "source": "syllabus_rag",
+            "params": {"course_id": "CS101"},
+            "query_type": "tutoring",
         })
         state = _make_state("Tell me about CS101", selected_agent="query_agent")
 
@@ -301,7 +301,9 @@ class TestExecuteAgent:
             result = await execute_agent(state)
 
         assert len(result["tool_calls"]) == 1
-        assert result["tool_calls"][0].tool_name == "course_lookup"
+        # Standalone query agent now reports its dispatched source as the
+        # tool_name in trace (uniform with plan-step labels).
+        assert result["tool_calls"][0].tool_name == "query/syllabus_rag"
 
 
 # ---------------------------------------------------------------------------
@@ -386,8 +388,8 @@ class TestBuildGraph:
             "decision": "allow", "confidence": 0.9, "reason": "ok",
         })
         query_response = json.dumps({
-            "tool": "schedule_query",
-            "arguments": {"course_id": "CS101"},
+            "source": "catalog_db",
+            "params": {"term": "F25", "course_codes": ["CS101"]},
             "query_type": "deterministic",
         })
 
@@ -408,4 +410,6 @@ class TestBuildGraph:
         assert result["intent"] == "query"
         assert result["selected_agent"] == "query_agent"
         assert result["outer_safety_result"].final_decision == SafetyDecision.ALLOW
-        assert "Mon/Wed/Fri" in result["response"]
+        # CS101 mocked at MWF 10:00-10:50; formatter renders day codes as "M/W/F"
+        assert "CS101" in result["response"]
+        assert "M/W/F" in result["response"]

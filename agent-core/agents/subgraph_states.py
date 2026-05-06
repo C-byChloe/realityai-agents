@@ -24,18 +24,24 @@ from typing_extensions import TypedDict
 
 
 class QueryAgentInternalState(TypedDict, total=False):
-    """Working memory for the Query Agent subgraph. Internal-only."""
+    """Working memory for the Query Agent subgraph. Internal-only.
+
+    The standalone path uses the same `QuerySource` vocabulary as the
+    plan-driven path — single source of truth for "what data layer is
+    being read". The dispatch flow differs (single-shot LLM pick vs.
+    plan-DAG executor), but both call into `_SOURCE_HANDLERS` underneath.
+    """
 
     user_message: str
 
-    # Routing
-    route_decision: dict           # parsed LLM JSON: {"tool", "arguments", "query_type"}
-    selected_tool: str
-    tool_arguments: dict
+    # Routing — LLM picks a typed source + params (NOT a tool name)
+    route_decision: dict           # parsed LLM JSON: {"source", "params", "query_type"}
+    selected_source: str            # one of QuerySource enum values
+    source_params: dict
     query_type: str                 # "deterministic" | "tutoring"
 
-    # Execution
-    raw_tool_result: dict
+    # Execution — handler returns typed Pydantic, NOT a dict
+    raw_typed_result: object        # StudentTranscript / DegreeProgram / list[CourseSection] / list[SyllabusChunk]
     execution_error: str | None
 
     # Output (carried forward into the boundary model)
@@ -58,14 +64,14 @@ class QueryAgentOutput(BaseModel):
 
     response: str
     success: bool
-    selected_tool: str = ""
-    query_type: str = ""           # "deterministic" | "tutoring"
+    selected_source: str = ""       # one of QuerySource enum values, or "" if LLM short-circuited
+    query_type: str = ""            # "deterministic" | "tutoring"
 
 
 QUERY_INTERNAL_ONLY_KEYS: frozenset[str] = frozenset({
     "route_decision",
-    "tool_arguments",
-    "raw_tool_result",
+    "source_params",
+    "raw_typed_result",
     "execution_error",
     "response_text",
 })
