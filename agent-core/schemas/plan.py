@@ -67,6 +67,13 @@ class PlanStep(BaseModel):
     solver_type: SolverType | None = None
     solver_inputs: dict | None = None
 
+    # Layer 2 of query rewrite — source-level reformulation. Only populated
+    # for query steps where `query_source == "syllabus_rag"`. Other sources
+    # (canvas / degree_db / catalog_db) absorb their reformulation into the
+    # existing typed `query_params` fields.
+    semantic_query: str | None = None
+    query_expansion: list[str] | None = None
+
     @model_validator(mode="after")
     def _check_required_fields_per_agent_type(self) -> "PlanStep":
         if self.agent_type is AgentType.QUERY:
