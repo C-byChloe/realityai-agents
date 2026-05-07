@@ -24,10 +24,16 @@ from safety.inner.schemas import (
 from safety.outer.schemas import SessionContext
 
 
-def _inp(tool: str, args: dict, *, user_id: str = "instructor_smith") -> InnerSafetyInput:
+def _inp(
+    tool: str,
+    args: dict,
+    *,
+    user_id: str = "instructor_smith",
+    user_role: str = "instructor",
+) -> InnerSafetyInput:
     return InnerSafetyInput(
         session=SessionContext(
-            user_id=user_id, session_id="s1", user_role="instructor"
+            user_id=user_id, session_id="s1", user_role=user_role
         ),
         tool_name=tool,
         tool_args=args,
@@ -225,3 +231,78 @@ class TestFailureModes:
         # Unknown tool
         out = await check_live_state(_inp("nonexistent_tool", {}))
         assert out.decision != InnerSafetyDecision.ALLOW
+
+
+# ---------------------------------------------------------------------------
+# Caller-identity guard for enrollment_modify (sec-fix from outer matrix
+# loosening). Granting students access to enrollment_modify at Layer 1
+# would silently allow one student to drop or enroll another; this guard
+# enforces self-only modifications for student-role callers without
+# blocking instructor / registrar from doing it on behalf of others.
+# ---------------------------------------------------------------------------
+
+
+class TestStudentSelfModifyEnrollment:
+    async def test_student_can_self_enroll_in_open_course(self):
+        """Student S100 enrolls themselves in CS101 (capacity 25/30).
+        caller_id == student_id → identity check passes → capacity check
+        passes → ALLOW.
+        """
+        out = await check_live_state(
+            _inp(
+                "enrollment_modify",
+                {"student_id": "S100", "course_id": "CS101", "action": "add"},
+                user_id="S100",
+                user_role="student",
+            )
+        )
+        assert out.decision == InnerSafetyDecision.ALLOW
+        assert out.reason_code == "enrollment_capacity_ok"
+
+    async def test_student_cannot_enroll_other_student(self):
+        """Student kim tries to enroll S100 (a different student) into
+        CS101. Caller-identity check denies BEFORE the capacity check
+        runs — a student cannot modify another student's enrollment.
+        """
+        out = await check_live_state(
+            _inp(
+                "enrollment_modify",
+                {"student_id": "S100", "course_id": "CS101", "action": "add"},
+                user_id="kim",
+                user_role="student",
+            )
+        )
+        assert out.decision == InnerSafetyDecision.DENY
+        assert out.reason_code == "student_can_only_self_modify_enrollment"
+        assert out.metadata["caller_user_id"] == "kim"
+        assert out.metadata["target_student_id"] == "S100"
+
+    async def test_student_cannot_drop_another_student(self):
+        """Symmetric guard for drop action — student cannot drop another
+        student's enrollment, even if that student is enrolled.
+        """
+        out = await check_live_state(
+            _inp(
+                "enrollment_modify",
+                {"student_id": "S001", "course_id": "CS101", "action": "drop"},
+                user_id="kim",
+                user_role="student",
+            )
+        )
+        assert out.decision == InnerSafetyDecision.DENY
+        assert out.reason_code == "student_can_only_self_modify_enrollment"
+
+    async def test_instructor_can_still_enroll_any_student(self):
+        """Caller-identity guard fires only on student role; instructors
+        retain the ability to enroll anyone (capacity gate still applies).
+        """
+        out = await check_live_state(
+            _inp(
+                "enrollment_modify",
+                {"student_id": "S100", "course_id": "CS101", "action": "add"},
+                user_id="instructor_smith",
+                user_role="instructor",
+            )
+        )
+        assert out.decision == InnerSafetyDecision.ALLOW
+        assert out.reason_code == "enrollment_capacity_ok"

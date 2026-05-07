@@ -200,22 +200,28 @@ class TestOuterSafetyNode:
         assert result["requires_approval"] is False
         assert len(result["outer_safety_result"].tier_results) == 3
 
-    async def test_student_action_short_circuits_at_rbac(self):
-        """Student trying to do `action` is denied at Tier 1 — RBAC."""
-        # No LLM patch needed: RBAC fires before Tier 3 is invoked.
+    async def test_student_action_intent_allowed_at_outer_defers_to_inner(self):
+        """Outer ALLOWs (student, action) — defers tool-level RBAC to
+        inner Layer 1. Outer's intent-category granularity cannot
+        distinguish legitimate self-enroll from forbidden grade_update;
+        the precise gate happens at inner. This test pins the deferral.
+        """
         state = _make_state(
-            "Update grades",
+            "Enroll me in CS101",
             intent="action",
             user_role="student",
         )
-        with patch("orchestrator._get_llm", return_value=_mock_llm_response("{}")):
+        analyzer_ok = '{"decision": "allow", "confidence": 0.9, "reason": "ok"}'
+        with patch("orchestrator._get_llm", return_value=_mock_llm_response(analyzer_ok)):
             result = await outer_safety_node(state)
 
         out = result["outer_safety_result"]
-        assert out.final_decision == SafetyDecision.DENY
-        assert out.short_circuited_at == TierName.RBAC
-        assert out.final_reason_code == "role_lacks_action_grant"
-        assert len(out.tier_results) == 1  # Tiers 2 + 3 never ran
+        assert out.final_decision == SafetyDecision.ALLOW
+        assert out.short_circuited_at is None
+        # All three tiers ran because nothing fired a non-ALLOW.
+        assert len(out.tier_results) == 3
+        assert out.tier_results[0].tier == TierName.RBAC
+        assert out.tier_results[0].decision == SafetyDecision.ALLOW
 
     async def test_prompt_injection_short_circuits_at_static_rules(self):
         """Lexical injection pattern is caught at Tier 2 (static rules)."""

@@ -20,13 +20,16 @@
 
 roles:
   student:
-    # Students cannot directly invoke any action tool. Outer RBAC also
-    # denies action-class intents for students; this is the post-LLM
-    # re-check that catches prompt injection that flipped tool selection.
-    granted_tools: []
+    # Students may invoke enrollment_modify for self-enroll / self-drop.
+    # Layer 4 (`live_state.py:_check_enrollment_modify`) additionally
+    # enforces that `args["student_id"] == session.user_id` for student-
+    # role callers — so the student can only modify their OWN enrollment,
+    # not another student's. grade_update and assignment_create remain
+    # instructor-only at this layer.
+    granted_tools:
+      - enrollment_modify
     denied_tools:
       - grade_update
-      - enrollment_modify
       - assignment_create
 
   instructor:

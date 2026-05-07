@@ -109,3 +109,36 @@ class TestMetadata:
         out = check_tool_authorization(_inp("student", "grade_update"))
         assert out.metadata["role"] == "student"
         assert out.metadata["tool"] == "grade_update"
+
+
+# ---------------------------------------------------------------------------
+# Student tool grants — pins the matrix expansion that allows self-enroll
+# while keeping grade_update / assignment_create instructor-only.
+# ---------------------------------------------------------------------------
+
+
+class TestStudentEnrollmentGrant:
+    """Outer RBAC was loosened to ALLOW (student, action) so legitimate
+    self-enroll could reach a tool dispatch. Inner Layer 1 is now the
+    precise gate: students get `enrollment_modify` (granted) but NOT
+    `grade_update` / `assignment_create` (denied). Layer 4 then enforces
+    the caller-identity invariant — a student can only enroll/drop their
+    OWN record, never another student's.
+
+    These tests pin the matrix change against accidental regression.
+    """
+
+    def test_student_can_invoke_enrollment_modify(self):
+        out = check_tool_authorization(_inp("student", "enrollment_modify"))
+        assert out.decision == InnerSafetyDecision.ALLOW
+        assert out.reason_code == "role_grants_tool"
+
+    def test_student_still_denied_grade_update(self):
+        out = check_tool_authorization(_inp("student", "grade_update"))
+        assert out.decision == InnerSafetyDecision.DENY
+        assert out.reason_code == "role_lacks_tool_grant"
+
+    def test_student_still_denied_assignment_create(self):
+        out = check_tool_authorization(_inp("student", "assignment_create"))
+        assert out.decision == InnerSafetyDecision.DENY
+        assert out.reason_code == "role_lacks_tool_grant"

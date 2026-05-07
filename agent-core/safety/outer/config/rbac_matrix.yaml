@@ -18,8 +18,15 @@ roles:
     allowed_action_categories:
       - query        # transcript / catalog / syllabus reads
       - planning     # multi-step schedule planning
-    denied_action_categories:
-      - action       # writes (grades, enrollments, assignments) — gated through HiTL workflow
+      - action       # legitimate self-affecting writes (e.g., self-enroll
+                     # in an open course). Tool-level filtering happens at
+                     # inner Layer 1 (`tool_auth_matrix.yaml`); outer at
+                     # category granularity is too coarse to distinguish
+                     # self-enroll (legitimate) from grade_update (denied).
+                     # Layer 4 additionally enforces caller-identity for
+                     # cross-student writes (a student can only modify
+                     # their own enrollment).
+    denied_action_categories: []
 
   instructor:
     allowed_action_categories:

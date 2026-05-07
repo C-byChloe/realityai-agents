@@ -120,6 +120,26 @@ async def _check_enrollment_modify(
     course_id = args["course_id"]
     student_id = args["student_id"]
     action = args["action"]
+    caller_role = safety_input.session.user_role
+    caller_id = safety_input.session.user_id
+
+    # Caller-identity guard: students may modify only their OWN enrollment
+    # record. Instructors / registrars retain the ability to enroll or
+    # drop any student. Without this check, granting students access to
+    # `enrollment_modify` at Layer 1 would silently allow one student to
+    # drop another. The check runs BEFORE the world-state read so a
+    # spoofed student_id never hits the DB.
+    if caller_role == "student" and student_id != caller_id:
+        return (
+            InnerSafetyDecision.DENY,
+            "student_can_only_self_modify_enrollment",
+            (
+                f"User {caller_id} (role=student) cannot modify enrollment "
+                f"for {student_id}; students may only modify their own "
+                f"enrollment record."
+            ),
+            {"caller_user_id": caller_id, "target_student_id": student_id},
+        )
 
     state = await _read_course_state(course_id)
 

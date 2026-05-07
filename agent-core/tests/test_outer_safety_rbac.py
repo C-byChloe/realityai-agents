@@ -1,15 +1,19 @@
 """Phase 1 unit tests for outer safety Tier 1 — RBAC.
 
-Locks the four verdict cases that ADR 005 D5 + the rbac matrix YAML
-together prescribe:
+Locks the verdict cases that ADR 005 D5 + the rbac matrix YAML together
+prescribe. Note that `(student, action)` ALLOWs at outer — outer is
+intent-category granularity and cannot distinguish self-enroll
+(legitimate) from grade_update (forbidden). Tool-level RBAC for student
+writes lives at inner Layer 1; caller-identity (a student modifying
+another student's record) lives at inner Layer 4.
 
-  | role     | intent  | verdict          | reason_code                  |
-  |----------|---------|------------------|------------------------------|
-  | student  | query   | ALLOW            | role_grants_action           |
-  | student  | action  | DENY             | role_lacks_action_grant      |
-  | instructor | action| ALLOW            | role_grants_action           |
-  | admin    | query   | DENY (fail-closed)| unknown_role                |
-  | student  | chitchat| FLAG_FOR_REVIEW  | unknown_intent_for_role      |
+  | role       | intent   | verdict            | reason_code                  |
+  |------------|----------|--------------------|------------------------------|
+  | student    | query    | ALLOW              | role_grants_action           |
+  | student    | action   | ALLOW (defer)      | role_grants_action           |
+  | instructor | action   | ALLOW              | role_grants_action           |
+  | admin      | query    | DENY (fail-closed) | unknown_role                 |
+  | student    | chitchat | FLAG_FOR_REVIEW    | unknown_intent_for_role      |
 """
 
 from safety.outer.rbac import check_rbac
@@ -55,12 +59,17 @@ class TestVerdicts:
         assert out.decision == SafetyDecision.ALLOW
         assert out.reason_code == "role_grants_action"
 
-    def test_known_role_explicitly_denied_intent_denies(self):
+    def test_student_action_intent_allowed_defers_to_inner(self):
+        """Outer is intent-category-level; cannot distinguish self-enroll
+        from grade_update. Outer ALLOWs `(student, action)` and defers
+        tool-level RBAC to inner Layer 1 + caller-identity to inner
+        Layer 4. Pins the matrix decision against accidental regression
+        back to the over-restrictive "student denied all action" rule
+        that blocked legitimate self-enrollment.
+        """
         out = check_rbac(_inp("student", "action"))
-        assert out.decision == SafetyDecision.DENY
-        assert out.reason_code == "role_lacks_action_grant"
-        assert "student" in out.reason_human
-        assert "action" in out.reason_human
+        assert out.decision == SafetyDecision.ALLOW
+        assert out.reason_code == "role_grants_action"
 
     def test_instructor_can_perform_action(self):
         out = check_rbac(_inp("instructor", "action"))
