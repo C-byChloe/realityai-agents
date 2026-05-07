@@ -1,33 +1,33 @@
 # Inner Safety Smoke Eval — Baseline
 
-**Generated:** 2026-05-07T23:06:40.221138+00:00
-**Git SHA:** b539e04
-**Cases:** 10
-**Avg total latency:** 0.40 ms
+**Generated:** 2026-05-07T23:16:09.249636+00:00
+**Git SHA:** cd1f898
+**Cases:** 11
+**Avg total latency:** 0.36 ms
 
 ## Decision accuracy
 
 | Expected | Correct / Total | Match rate |
 |----------|:---------------:|:----------:|
 | ALLOW | 3/3 | 100% |
-| DENY | 7/7 | 100% |
+| DENY | 8/8 | 100% |
 
-**Decision-perfect:** 10/10
-**Short-circuit-perfect (caught at expected layer):** 10/10
+**Decision-perfect:** 11/11
+**Short-circuit-perfect (caught at expected layer):** 11/11
 
 ## Defense-in-depth coverage
 
-Of the 7 cases that should NOT be ALLOW, **7 got
+Of the 8 cases that should NOT be ALLOW, **8 got
 blocked** (by any layer). The layered design is working iff this
-number == 7.
+number == 8.
 
-  - Coverage: **7/7** (100%)
+  - Coverage: **8/8** (100%)
 
 ## Audit invariant (ADR 006 D4)
 
 Every case must produce a non-empty audit_id, regardless of decision.
 
-  - Cases with audit_id: **10/10**
+  - Cases with audit_id: **11/11**
 
 ## Per-layer attribution
 
@@ -36,7 +36,7 @@ Every case must produce a non-empty audit_id, regardless of decision.
 | tool_authorization | 2 | 2 | 2 |
 | parameter_presence | 2 | 2 | 2 |
 | parameter_format | 1 | 1 | 1 |
-| live_state | 2 | 2 | 2 |
+| live_state | 3 | 3 | 3 |
 | (no short-circuit, all-allow) | 3 | 3 | 3 |
 
 A row's "Aligned" column shows how many cases were caught **at the
@@ -61,11 +61,13 @@ indicates a real bug:
 | 8 | deny_l3_enrollment_action_invali | enrollment_modify | deny | deny | parameter_format -> parameter_format | PASS |
 | 9 | deny_l4_enrollment_to_full_cours | enrollment_modify | deny | deny | live_state -> live_state | PASS |
 | 10 | deny_l4_db_unavailable_fails_clo | enrollment_modify | deny | deny | live_state -> live_state | PASS |
+| 11 | deny_l4_student_cross_user_enrol | enrollment_modify | deny | deny | live_state -> live_state | PASS |
 
 ## Methodology + honest limitations
 
-- 10 cases, hand-curated to cover each layer's expected catch + the
-  fail-closed path (D3) and audit invariant (D4).
+- 11 cases, hand-curated to cover each layer's expected catch + the
+  fail-closed path (D3), audit invariant (D4), and Layer 4's
+  caller-identity guard (sec-fix from outer matrix loosening).
 - Fully deterministic — no LLM call. Mock world state in
   `safety/inner/live_state.py:_MOCK_COURSE_STATE` is the single source
   of truth for Layer 4 race-condition cases.

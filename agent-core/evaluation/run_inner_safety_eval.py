@@ -99,6 +99,12 @@ async def _run_case(case: dict) -> dict[str, Any]:
         "tool_name": case["tool_name"],
         "expected_decision": case["expected_decision"],
         "expected_short_circuit_at": case["expected_short_circuit_at"],
+        # Optional: when a case asserts a specific reason_code, the
+        # runner adds it to the perfect-match check below. Used by
+        # cases where the layer is right but the wrong sub-rule firing
+        # would still be a regression (e.g., Layer 4 caller-identity vs.
+        # capacity check vs. course-not-found).
+        "expected_reason_code": case.get("expected_reason_code"),
         "actual_decision": result.final_decision.value,
         "actual_short_circuit_at": (
             result.short_circuited_at.value if result.short_circuited_at else None
@@ -166,7 +172,15 @@ def _per_case_table(results: list[dict]) -> str:
     for r in results:
         decision_match = r["actual_decision"] == r["expected_decision"]
         sc_match = r["actual_short_circuit_at"] == r["expected_short_circuit_at"]
-        check = "PASS" if decision_match and sc_match else "FAIL"
+        # reason_code is checked only when the case asserts one — most
+        # cases don't, because layer attribution is the primary contract.
+        # Cases that do assert (e.g., the cross-student caller-identity
+        # case) need the sub-reason to lock the right rule firing.
+        rc_match = (
+            r["expected_reason_code"] is None
+            or r["actual_reason_code"] == r["expected_reason_code"]
+        )
+        check = "PASS" if decision_match and sc_match and rc_match else "FAIL"
         sc_str = f"{r['expected_short_circuit_at'] or '-'} -> {r['actual_short_circuit_at'] or '-'}"
         cat = r["category"][:32]
         lines.append(
@@ -253,8 +267,9 @@ indicates a real bug:
 
 ## Methodology + honest limitations
 
-- 10 cases, hand-curated to cover each layer's expected catch + the
-  fail-closed path (D3) and audit invariant (D4).
+- 11 cases, hand-curated to cover each layer's expected catch + the
+  fail-closed path (D3), audit invariant (D4), and Layer 4's
+  caller-identity guard (sec-fix from outer matrix loosening).
 - Fully deterministic — no LLM call. Mock world state in
   `safety/inner/live_state.py:_MOCK_COURSE_STATE` is the single source
   of truth for Layer 4 race-condition cases.
