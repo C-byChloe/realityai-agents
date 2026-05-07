@@ -10,8 +10,8 @@ output_format: json
 performance:
   benchmark: evaluation/trace_eval_set.jsonl
   metric: source_match_rate
-  latest_score: null
-  measured_at: null
+  latest_score: 1.0
+  measured_at: 2026-05-07T22:27:28.515460+00:00
   notes: |
     The 4 query scenarios in trace_eval_set.jsonl exercise canvas,
     degree_db, and catalog_db routing. syllabus_rag has no dedicated

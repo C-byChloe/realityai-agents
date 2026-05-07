@@ -11,8 +11,8 @@ output_schema: schemas.plan.Plan
 performance:
   benchmark: evaluation/trace_eval_set.jsonl
   metric: plan_validity + step_success_rate
-  latest_score: null
-  measured_at: null
+  latest_score: 1.0
+  measured_at: 2026-05-07T22:27:28.415163+00:00
   notes: |
     The 2 planning + 4 coref scenarios in trace_eval_set.jsonl invoke
     this prompt. Plan validity (Pydantic-passing JSON) and per-step

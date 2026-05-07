@@ -10,8 +10,8 @@ output_format: json
 performance:
   benchmark: evaluation/inner_safety_smoke_eval.jsonl
   metric: routing_accuracy
-  latest_score: null
-  measured_at: null
+  latest_score: 1.0
+  measured_at: 2026-05-07T22:27:27.616836+00:00
   notes: |
     Inner safety smoke eval exercises route-then-validate flow. A
     routing-only benchmark would isolate the LLM's tool/argument

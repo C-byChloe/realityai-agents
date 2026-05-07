@@ -8,6 +8,34 @@ delta for non-trivial edits.
 
 ---
 
+## 2026-05-07 — First bench cycle
+
+`tools/prompt_bench.py` shipped. First run wires two of the four bench
+sources (`trace_eval_set.jsonl` and `inner_safety_smoke_eval.jsonl`),
+producing the first official `latest_score` numbers in each prompt's
+frontmatter:
+
+| Prompt | Bench | Score |
+|---|---|---|
+| `intent_classifier` | trace_eval_set | 12/12 (100%) |
+| `query_agent` | trace_eval_set | 12/12 (100%) |
+| `planning_agent` | trace_eval_set | 12/12 (100%) |
+| `action_agent` | inner_safety_smoke_eval | 10/10 (100%) |
+
+Two prompts (`coref_resolver`, `intent_analyzer`) are bound to real-LLM
+eval sets and remain unwired pending API budget. The bench runner exits
+2 with an explicit reason for those rather than silently passing.
+
+Frontmatter writeback uses surgical regex on `latest_score:` and
+`measured_at:` lines (not full YAML round-trip) to keep diffs to the
+two fields that actually changed; `notes: |` block scalars preserved
+byte-for-byte.
+
+Bench history at `bench_history/<id>.jsonl` is the append-only audit
+trail; safe to run on every dev loop. Frontmatter `latest_score`
+updates only on `--write-frontmatter`, so daily bench runs don't churn
+the prompt files.
+
 ## 2026-05-07 — Library bootstrap
 
 Extracted all 6 production system prompts into versioned `prompts/<id>.md`
