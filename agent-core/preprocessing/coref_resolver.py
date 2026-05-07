@@ -36,7 +36,13 @@ from preprocessing.schemas import RewrittenQuery
 
 logger = logging.getLogger(__name__)
 
-CONFIDENCE_FALLBACK_THRESHOLD = 0.5
+# Env-tunable so the eval harness can sweep the threshold to produce
+# the before/after numbers the resume cites. Default 0.5 was chosen by
+# `evaluation.trace_completion_eval` — see eval report timestamped
+# alongside this file.
+CONFIDENCE_FALLBACK_THRESHOLD = float(
+    os.environ.get("COREF_CONFIDENCE_FALLBACK_THRESHOLD", "0.5")
+)
 MAX_HISTORY_TURNS = 6  # bound prompt size
 
 COREF_SYSTEM_PROMPT = """\
@@ -151,9 +157,17 @@ def make_coref_resolver_node(llm=None):
             )
 
         # Confidence-based fallback: low confidence → use original verbatim.
+        # Threshold is read at call-time (not import-time) so the eval
+        # harness can flip it via env var between runs without re-importing.
+        threshold = float(
+            os.environ.get(
+                "COREF_CONFIDENCE_FALLBACK_THRESHOLD",
+                str(CONFIDENCE_FALLBACK_THRESHOLD),
+            )
+        )
         effective_query = (
             rewritten.rewritten_query
-            if rewritten.confidence >= CONFIDENCE_FALLBACK_THRESHOLD
+            if rewritten.confidence >= threshold
             else rewritten.original_query
         )
 

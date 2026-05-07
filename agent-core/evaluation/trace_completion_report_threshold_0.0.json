@@ -1,0 +1,107 @@
+{
+  "timestamp": "2026-05-07T19:21:15.022375+00:00",
+  "config": {
+    "coref_confidence_threshold": 0.0
+  },
+  "summary": {
+    "total_scenarios": 12,
+    "passed": 10,
+    "task_completion_rate": 83.33
+  },
+  "by_category": {
+    "action_blocked": {
+      "total": 2,
+      "passed": 2,
+      "rate": 100.0
+    },
+    "coref_resolved": {
+      "total": 4,
+      "passed": 2,
+      "rate": 50.0
+    },
+    "planning": {
+      "total": 2,
+      "passed": 2,
+      "rate": 100.0
+    },
+    "query": {
+      "total": 4,
+      "passed": 4,
+      "rate": 100.0
+    }
+  },
+  "scenarios": [
+    {
+      "id": 1,
+      "category": "query",
+      "completed": true,
+      "reason": "query tool succeeded"
+    },
+    {
+      "id": 2,
+      "category": "query",
+      "completed": true,
+      "reason": "query tool succeeded"
+    },
+    {
+      "id": 3,
+      "category": "query",
+      "completed": true,
+      "reason": "query tool succeeded"
+    },
+    {
+      "id": 4,
+      "category": "query",
+      "completed": true,
+      "reason": "query tool succeeded"
+    },
+    {
+      "id": 5,
+      "category": "action_blocked",
+      "completed": true,
+      "reason": "outer safety routed to HiTL/deny"
+    },
+    {
+      "id": 6,
+      "category": "action_blocked",
+      "completed": true,
+      "reason": "outer safety routed to HiTL/deny"
+    },
+    {
+      "id": 7,
+      "category": "planning",
+      "completed": true,
+      "reason": "all 2 plan steps succeeded"
+    },
+    {
+      "id": 8,
+      "category": "planning",
+      "completed": true,
+      "reason": "all 1 plan steps succeeded"
+    },
+    {
+      "id": 9,
+      "category": "coref_resolved",
+      "completed": true,
+      "reason": "normalized='Plan my next semester around CS3134'"
+    },
+    {
+      "id": 10,
+      "category": "coref_resolved",
+      "completed": true,
+      "reason": "normalized=\"What are CS3157's prerequisites?\""
+    },
+    {
+      "id": 11,
+      "category": "coref_resolved",
+      "completed": false,
+      "reason": "normalized leaked forbidden 'CS9999': 'Plan around CS9999'"
+    },
+    {
+      "id": 12,
+      "category": "coref_resolved",
+      "completed": false,
+      "reason": "normalized leaked forbidden 'CS_NONEXISTENT_404': 'Plan CS_NONEXISTENT_404 for me'"
+    }
+  ]
+}
