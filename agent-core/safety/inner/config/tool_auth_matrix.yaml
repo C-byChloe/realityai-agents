@@ -1,0 +1,48 @@
+# Inner safety Layer 1 — tool authorization matrix.
+#
+# Maps `(user_role, tool_name)` to ALLOW/DENY. Unlike the outer RBAC
+# matrix (which gates `(role, action_category)`), this matrix gates the
+# ACTUAL tool the LLM picked — re-checking after the LLM had a chance to
+# emit something between outer's gate and execution.
+#
+# This is the prompt-injection re-check: outer says "the role can do
+# action category X"; inner says "and the role can specifically invoke
+# tool Y." Outer cannot see Y because tool selection happens after
+# outer runs.
+#
+# Verdict semantics in safety/inner/tool_authorization.py:check_tool_authorization:
+#   tool in role's `granted_tools`  → ALLOW
+#   tool in role's `denied_tools`   → DENY (explicit policy)
+#   tool unknown to a known role    → DENY (defensive — both axes are bounded)
+#   role unknown                    → DENY (fail-closed; ADR 005 D5)
+#
+# See docs/adr/006-inner-safety-layer.md for design rationale.
+
+roles:
+  student:
+    # Students cannot directly invoke any action tool. Outer RBAC also
+    # denies action-class intents for students; this is the post-LLM
+    # re-check that catches prompt injection that flipped tool selection.
+    granted_tools: []
+    denied_tools:
+      - grade_update
+      - enrollment_modify
+      - assignment_create
+
+  instructor:
+    granted_tools:
+      - grade_update
+      - enrollment_modify
+      - assignment_create
+    denied_tools: []
+
+  registrar:
+    # Registrar has full action grants; bulk operations would also be
+    # granted here if added to the action tool registry.
+    granted_tools:
+      - grade_update
+      - enrollment_modify
+      - assignment_create
+    denied_tools: []
+
+# Roles not listed above are implicitly DENIED at runtime (fail-closed).
