@@ -22,6 +22,7 @@ build/
 # Node
 node_modules/
 web-dashboard/dist/
+web-dashboard/.vite/
 
 # IDE
 .idea/
@@ -45,3 +46,9 @@ chroma_data/
 *_pb2.py
 *_pb2_grpc.py
 *_pb2.pyi
+
+# Eval reports — overwritten on each run. Threshold-suffixed copies
+# (e.g., trace_completion_report_threshold_0.5.json) are archived
+# artifacts and stay tracked.
+agent-core/evaluation/e2e_report.json
+agent-core/evaluation/trace_completion_report.json

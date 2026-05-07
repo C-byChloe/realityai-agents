@@ -15,6 +15,9 @@ def run_e2e_tests() -> dict:
     """Run E2E tests via pytest and produce a JSON report."""
     test_file = Path(__file__).parent.parent / "tests" / "test_e2e_scenarios.py"
 
+    # `-v` is required so pytest prints one "PASSED"/"FAILED" line per
+    # test (the parser below keys off those strings). Do NOT add `-q` —
+    # it suppresses per-test status and silently zeroes the report.
     result = subprocess.run(
         [
             sys.executable, "-m", "pytest",
@@ -22,7 +25,6 @@ def run_e2e_tests() -> dict:
             "-v",
             "--tb=short",
             "--no-header",
-            "-q",
         ],
         capture_output=True,
         text=True,
