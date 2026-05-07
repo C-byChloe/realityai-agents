@@ -216,11 +216,15 @@ async def run_action_step(
     without ever calling the tool. On ALLOW: invokes the tool, persists
     the audit with execution outcome.
 
-    The `session` kwarg is the JWT-derived identity (D5). Until the API
-    gateway populates it across the plan executor, we default to a
-    minimal "instructor" session — same fallback choice as outer safety
-    has during the gateway transition. Production wiring (Phase 7) plumbs
-    it through `PlanExecState.session`.
+    The `session` kwarg is the JWT-derived identity (D5). Production
+    callers (the plan-step node in `planning_agent.py`) plumb it
+    through from `PlanExecState.session`. When `session` is omitted —
+    as in unit tests that don't seed identity — we default to a
+    student-role session so missing wiring fails closed at Layer 1
+    rather than silently granting instructor privileges. This is a
+    deliberate fail-closed choice: the audit log will record the
+    denial under "student" and the test will surface the missing
+    plumbing rather than masking it with a privilege escalation.
     """
     if not step.action_tool:
         raise ValueError(f"step {step.step_id}: missing action_tool")
@@ -272,15 +276,21 @@ async def run_action_step(
 
 
 def _default_plan_session() -> SessionContext:
-    """Fallback identity for plan-driven actions until PlanExecState
-    carries SessionContext end-to-end. Defaulting to instructor avoids
-    breaking grading/enrollment flows in tests; production wiring (Phase
-    7) replaces this with the JWT-derived role from the gateway.
+    """Fail-closed fallback identity for plan-driven actions.
+
+    Used only when `run_action_step` is called without an explicit
+    `session=` kwarg (unit tests, programmatic callers that haven't
+    plumbed identity yet). Defaulting to "student" — the most
+    restricted role — means a missing wiring is surfaced as a Layer 1
+    DENY rather than silently granting instructor privileges. The
+    production plan executor (`run_planning_agent`) builds a real
+    `SessionContext` from `AgentState["user_role"]` and passes it
+    through `PlanExecState.session`; this default never fires there.
     """
     return SessionContext(
-        user_id="instructor_smith",
-        session_id="plan-driven",
-        user_role="instructor",
+        user_id="",
+        session_id="plan-driven-default",
+        user_role="student",
     )
 
 
@@ -348,13 +358,14 @@ async def _inner_safety_node(state: ActionAgentInternalState) -> dict:
 
     safety_input = InnerSafetyInput(
         session=SessionContext(
-            user_id=state.get("user_id", "instructor_smith"),
+            user_id=state.get("user_id", ""),
             session_id=state.get("session_id", "subgraph"),
-            # Subgraph runs after outer RBAC has already permitted the
-            # action category for this caller; the standalone path's
-            # default identity is "instructor" (matches the gateway's
-            # post-outer guarantee for write-tier requests).
-            user_role=state.get("user_role", "instructor"),
+            # D5: role flows from the JWT-derived state field, never from
+            # messages. Default is the most-restricted role so a missing
+            # plumbing fails closed at Layer 1 (DENY) instead of granting
+            # instructor privileges. ActionAgentInput defaults user_role
+            # to "student" for the same reason.
+            user_role=state.get("user_role") or "student",
         ),
         tool_name=tool_name,
         tool_args=args,
@@ -452,6 +463,10 @@ async def invoke_action_subgraph(inp: ActionAgentInput, llm) -> ActionAgentOutpu
         "user_message": inp.user_message,
         "user_id": inp.user_id,
         "session_id": inp.session_id,
+        # D5: user_role must reach the inner_safety_check node. The
+        # subgraph internal state field defaults to None when missing;
+        # _inner_safety_node falls back to "student" (fail-closed).
+        "user_role": inp.user_role,
     })
     inner = final.get("inner_safety_result")
     audit_id = inner.audit.audit_id if inner is not None else ""
@@ -475,6 +490,10 @@ async def run_action_agent(state: AgentState, llm) -> dict:
             user_message=user_msg,
             user_id=state.get("user_id", ""),
             session_id=state.get("session_id", ""),
+            # D5 — pull the JWT-derived role from AgentState. ActionAgentInput
+            # defaults to "student" if missing, so a missing claim falls
+            # through to Layer 1 DENY rather than granting instructor.
+            user_role=state.get("user_role") or "student",
         ),
         llm,
     )

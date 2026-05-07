@@ -23,6 +23,12 @@ def _make_state(user_msg: str, **overrides) -> AgentState:
         "response": "",
         "user_id": "test-user",
         "session_id": "test-session",
+        # Plan-driven action steps run through inner safety Layer 1
+        # RBAC against this role. Default to instructor so existing
+        # action-step tests exercise the happy path; the
+        # TestActionStepInnerSafetyRoleEnforcement class below sets
+        # user_role="student" to lock the privilege-escalation guard.
+        "user_role": "instructor",
         "requires_approval": False,
         "approval_status": None,
     }
@@ -343,3 +349,101 @@ class TestActionStepInnerSafety:
         assert 1 in step_outputs
         assert "audit_id" in step_outputs[1]
         assert len(step_outputs[1]["audit_id"]) == 12
+
+
+# ---------------------------------------------------------------------------
+# Privilege escalation guard on the plan path — D5 invariant
+# ---------------------------------------------------------------------------
+
+
+class TestActionStepInnerSafetyRoleEnforcement:
+    """Pin the closure of the privilege-escalation bug found in audit:
+    a student-role caller cannot execute write tools by routing
+    through the plan path, even when the LLM produces a valid action
+    step that would pass Layers 2-4.
+
+    Before the sec-fix, run_action_step's _default_plan_session
+    hard-coded user_role="instructor" and PlanExecState had no
+    `session` field, so any student-triggered planning intent could
+    surface action steps that bypassed Layer 1 RBAC. These tests lock
+    the closed gap.
+    """
+
+    async def test_student_cannot_execute_grade_update_via_plan(self):
+        """student-role state → run_planning_agent dispatches an
+        action step → run_action_step receives session.user_role=
+        "student" via PlanExecState → Layer 1 denies. The tool is
+        NEVER invoked.
+        """
+        plan = {
+            "steps": [{
+                "step_id": 1,
+                "description": "student trying to update own grade",
+                "depends_on": [],
+                "agent_type": "action",
+                "action_tool": "grade_update",
+                "action_args": {
+                    "student_id": "S001",
+                    "course_id": "CS101",
+                    "assignment_id": "A1",
+                    "grade": "A",
+                },
+            }],
+            "reasoning": "Student attempting privilege escalation.",
+        }
+        state = _make_state("give me an A", user_role="student")
+        result = await run_planning_agent(state, _mock_llm(json.dumps(plan)))
+
+        assert len(result["tool_calls"]) == 1
+        tc = result["tool_calls"][0]
+        assert tc.success is False
+        # Layer 1's deny message names the role and tool.
+        assert tc.error and "student" in tc.error.lower()
+        assert tc.error and "grade_update" in tc.error
+
+        # The step output is the structured denial dict; reason_code
+        # confirms it was Layer 1 specifically (not Layer 2/3/4).
+        step_output = result["step_outputs"][1]
+        assert step_output["denied_by_inner_safety"] is True
+        assert step_output["reason_code"] == "role_lacks_tool_grant"
+
+    async def test_unknown_role_via_plan_fails_closed(self):
+        """JWT carrying a role name not in the matrix → Layer 1
+        DENY ("unknown_role") rather than fail-open. Same fail-closed
+        posture as outer safety ADR 005 D5.
+        """
+        plan = {
+            "steps": [{
+                "step_id": 1,
+                "description": "exotic role tries write",
+                "depends_on": [],
+                "agent_type": "action",
+                "action_tool": "enrollment_modify",
+                "action_args": {
+                    "student_id": "S100",
+                    "course_id": "CS101",
+                    "action": "add",
+                },
+            }],
+            "reasoning": "Unknown-role fail-closed test.",
+        }
+        state = _make_state("enroll me", user_role="phantom_role")
+        result = await run_planning_agent(state, _mock_llm(json.dumps(plan)))
+
+        tc = result["tool_calls"][0]
+        assert tc.success is False
+        step_output = result["step_outputs"][1]
+        assert step_output["denied_by_inner_safety"] is True
+
+    async def test_run_action_step_default_session_is_fail_closed(self):
+        """Direct callers of run_action_step who omit `session=` must
+        fall through to a student-role default — never instructor.
+        Pins the contract on `_default_plan_session()`.
+        """
+        from agents.action_agent import _default_plan_session
+
+        sess = _default_plan_session()
+        assert sess.user_role == "student", (
+            "Default plan session must be the most-restricted role so "
+            "missing wiring fails closed at Layer 1."
+        )

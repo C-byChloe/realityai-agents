@@ -35,6 +35,7 @@ from agents.action_agent import ACTION_TOOLS, run_action_step
 from agents.query_agent import run_query_step
 from reasoning.gap_analysis import compute_unsatisfied
 from reasoning.solver import ConstraintSolver
+from safety.outer.schemas import SessionContext
 from schemas.plan import AgentType, Plan, PlanStep, QuerySource
 from schemas.query_outputs import (
     CourseSection,
@@ -139,14 +140,21 @@ def _merge_step_outputs(left: dict, right: dict) -> dict:
     return {**(left or {}), **(right or {})}
 
 
-class PlanExecState(TypedDict):
+class PlanExecState(TypedDict, total=False):
     """State scoped to one plan execution. Lives only inside the compiled
     plan subgraph; never leaks to `AgentState`.
+
+    `session` carries the JWT-derived identity (D5) into action steps so
+    inner safety Layer 1 can RBAC against the actual caller's role
+    rather than a placeholder. `run_planning_agent` builds it from the
+    parent `AgentState`; without it, `run_action_step` falls through to
+    a fail-closed student-role default.
     """
 
     plan: Plan
     step_outputs: Annotated[dict[int, Any], _merge_step_outputs]
     tool_calls: Annotated[list[ToolCall], operator.add]
+    session: SessionContext
 
 
 # ---------------------------------------------------------------------------
@@ -164,7 +172,11 @@ def _make_step_node(step: PlanStep):
 
     async def node(state: PlanExecState) -> dict:
         try:
-            result = await _dispatch_step(step, state.get("step_outputs", {}))
+            result = await _dispatch_step(
+                step,
+                state.get("step_outputs", {}),
+                session=state.get("session"),
+            )
         except Exception as e:
             return {
                 "step_outputs": {step.step_id: e},
@@ -232,14 +244,21 @@ def step_node_name(step: PlanStep) -> str:
 import asyncio
 
 
-async def _dispatch_step(step: PlanStep, step_outputs: dict[int, Any]) -> Any:
+async def _dispatch_step(
+    step: PlanStep,
+    step_outputs: dict[int, Any],
+    *,
+    session: SessionContext | None = None,
+) -> Any:
     if step.agent_type is AgentType.QUERY:
         return await asyncio.to_thread(run_query_step, step, step_outputs)
     if step.agent_type is AgentType.ACTION:
         # run_action_step is async (calls inner_safety_check internally
         # which awaits Layer 4 live-state). The tool_func.invoke inside
         # is sync and brief — running it on the event loop is fine.
-        return await run_action_step(step, step_outputs)
+        # Session plumbing (D5): pass the JWT-derived identity so inner
+        # Layer 1 RBACs against the actual caller, not a placeholder.
+        return await run_action_step(step, step_outputs, session=session)
     if step.agent_type is AgentType.REASONING:
         return await asyncio.to_thread(_run_reasoning_step, step, step_outputs)
     if step.agent_type is AgentType.CONSTRAINT_SOLVER:
@@ -497,11 +516,23 @@ async def run_planning_agent(state: AgentState, llm) -> dict:
             "step_outputs": {},
         }
 
+    # D5 — propagate the JWT-derived identity into PlanExecState so
+    # action steps' inner Layer 1 RBAC checks the real caller's role.
+    # Default to "student" when missing, mirroring run_action_agent's
+    # fail-closed posture: a missing role claim must not silently grant
+    # instructor privileges to plan-driven action steps.
+    session = SessionContext(
+        user_id=state.get("user_id", ""),
+        session_id=state.get("session_id", ""),
+        user_role=state.get("user_role") or "student",
+    )
+
     subgraph = compile_plan_graph(plan)
     result = await subgraph.ainvoke({
         "plan": plan,
         "step_outputs": {},
         "tool_calls": [],
+        "session": session,
     })
 
     step_outputs = result.get("step_outputs", {})

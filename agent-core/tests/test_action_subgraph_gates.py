@@ -101,7 +101,7 @@ async def test_inner_safety_rejects_missing_required_args_before_execute():
     }))
 
     compiled = compile_action_agent(llm)
-    internal = await compiled.ainvoke({"user_message": "Update grade"})
+    internal = await compiled.ainvoke({"user_message": "Update grade", "user_role": "instructor"})
 
     inner = internal.get("inner_safety_result")
     assert inner is not None
@@ -111,7 +111,7 @@ async def test_inner_safety_rejects_missing_required_args_before_execute():
     assert "raw_tool_result" not in internal
 
     out = await invoke_action_subgraph(
-        ActionAgentInput(user_message="Update grade", user_id="u1", session_id="s1"), llm,
+        ActionAgentInput(user_message="Update grade", user_id="u1", session_id="s1", user_role="instructor"), llm,
     )
     assert out.success is False
     assert "missing required" in out.response.lower()
@@ -127,7 +127,7 @@ async def test_inner_safety_rejects_bad_enum_value():
         "confirmation": "ok",
     }))
     compiled = compile_action_agent(llm)
-    internal = await compiled.ainvoke({"user_message": "x"})
+    internal = await compiled.ainvoke({"user_message": "x", "user_role": "instructor"})
 
     inner = internal.get("inner_safety_result")
     assert inner is not None
@@ -136,7 +136,7 @@ async def test_inner_safety_rejects_bad_enum_value():
     assert "raw_tool_result" not in internal
 
     out = await invoke_action_subgraph(
-        ActionAgentInput(user_message="x", user_id="u1", session_id="s1"), llm,
+        ActionAgentInput(user_message="x", user_id="u1", session_id="s1", user_role="instructor"), llm,
     )
     assert out.success is False
     assert "'add'" in out.response and "'drop'" in out.response
@@ -154,7 +154,7 @@ async def test_audit_emits_correlation_id_on_success_path():
         "confirmation": "Dropping CS101",
     }))
     out = await invoke_action_subgraph(
-        ActionAgentInput(user_message="Drop CS101", user_id="u1", session_id="s1"), llm,
+        ActionAgentInput(user_message="Drop CS101", user_id="u1", session_id="s1", user_role="instructor"), llm,
     )
     assert out.success is True
     assert out.audit_id, "audit_id should be set on the boundary output"
@@ -171,7 +171,7 @@ async def test_audit_record_stays_internal():
         "confirmation": "ok",
     }))
     compiled = compile_action_agent(llm)
-    internal = await compiled.ainvoke({"user_message": "x"})
+    internal = await compiled.ainvoke({"user_message": "x", "user_role": "instructor"})
 
     # The full inner_safety_result + audit lives on internal state.
     inner = internal.get("inner_safety_result")
@@ -182,7 +182,7 @@ async def test_audit_record_stays_internal():
 
     # But the boundary output exposes only the audit_id correlator.
     out = await invoke_action_subgraph(
-        ActionAgentInput(user_message="x", user_id="u1", session_id="s1"), llm,
+        ActionAgentInput(user_message="x", user_id="u1", session_id="s1", user_role="instructor"), llm,
     )
     dumped = out.model_dump()
     assert "inner_safety_result" not in dumped
@@ -203,7 +203,7 @@ async def test_audit_built_on_deny_path_too():
         "confirmation": "ok",
     }))
     compiled = compile_action_agent(llm)
-    internal = await compiled.ainvoke({"user_message": "x"})
+    internal = await compiled.ainvoke({"user_message": "x", "user_role": "instructor"})
 
     inner = internal.get("inner_safety_result")
     assert inner is not None
@@ -219,6 +219,62 @@ async def test_audit_built_on_deny_path_too():
 # ---------------------------------------------------------------------------
 
 
+# ---------------------------------------------------------------------------
+# Privilege escalation guard — D5 invariant: user_role is plumbed end-to-end
+# ---------------------------------------------------------------------------
+
+
+async def test_student_role_denied_at_layer_1_on_standalone_path():
+    """Pin the closure of the privilege-escalation bug found in audit:
+    a student-role caller invoking a write tool (grade_update) MUST be
+    denied at Layer 1 (tool_authorization), not silently approved by a
+    placeholder "instructor" identity.
+
+    Before the sec-fix, _inner_safety_node defaulted to user_role=
+    "instructor" and ActionAgentInput didn't carry the role at all, so
+    student-role state would silently grant instructor privileges to
+    anything that passed Layers 2-4. The graph-level test below asserts
+    state["user_role"]="student" propagates to Layer 1's verdict.
+    """
+    llm = _mock_llm(json.dumps({
+        "tool": "grade_update",
+        "arguments": {
+            "student_id": "S001",
+            "course_id": "CS101",
+            "assignment_id": "A1",
+            "grade": "A",
+        },
+        "confirmation": "give me an A",
+    }))
+    compiled = compile_action_agent(llm)
+    internal = await compiled.ainvoke({
+        "user_message": "give me an A",
+        "user_role": "student",
+    })
+
+    inner = internal.get("inner_safety_result")
+    assert inner is not None
+    assert inner.final_decision == InnerSafetyDecision.DENY
+    assert inner.short_circuited_at == InnerLayerName.TOOL_AUTHORIZATION
+    # Critically, the tool was NEVER invoked — even though Layers 2-4
+    # would have been happy with the args.
+    assert "raw_tool_result" not in internal
+
+
+async def test_action_agent_input_default_role_is_fail_closed():
+    """ActionAgentInput.user_role defaults to "student" — the most
+    restricted role — so a missing wiring fails closed at Layer 1
+    instead of silently granting instructor privileges. This locks the
+    contract so a future refactor cannot regress it without breaking
+    this test.
+    """
+    inp = ActionAgentInput(
+        user_message="x", user_id="u1", session_id="s1",
+        # user_role intentionally omitted
+    )
+    assert inp.user_role == "student"
+
+
 async def test_clarification_skips_execute():
     """Clarification path leaves selected_tool empty and never produces raw_tool_result."""
     llm = _mock_llm(json.dumps({
@@ -226,14 +282,14 @@ async def test_clarification_skips_execute():
         "question": "Which course do you mean?",
     }))
     compiled = compile_action_agent(llm)
-    internal = await compiled.ainvoke({"user_message": "Drop the class"})
+    internal = await compiled.ainvoke({"user_message": "Drop the class", "user_role": "instructor"})
     assert internal.get("selected_tool", "") == ""
     assert "raw_tool_result" not in internal
     # Clarification path bypasses inner safety entirely (no tool to gate).
     assert internal.get("inner_safety_result") is None
 
     out = await invoke_action_subgraph(
-        ActionAgentInput(user_message="Drop the class", user_id="u1", session_id="s1"), llm,
+        ActionAgentInput(user_message="Drop the class", user_id="u1", session_id="s1", user_role="instructor"), llm,
     )
     assert out.selected_tool == ""
     assert "Which course" in out.response

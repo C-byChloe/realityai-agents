@@ -32,6 +32,10 @@ def _make_state(user_msg: str, **overrides) -> AgentState:
         "response": "",
         "user_id": "test-user",
         "session_id": "test-session",
+        # Inner safety Layer 1 RBACs against this role. Tests in this
+        # module exercise instructor-permitted flows; tests that need
+        # to verify student-role denial set user_role explicitly.
+        "user_role": "instructor",
         "requires_approval": False,
         "approval_status": None,
     }

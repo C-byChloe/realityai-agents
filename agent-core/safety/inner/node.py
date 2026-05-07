@@ -1,8 +1,20 @@
 """Inner safety composer — runs Layers 1-4 sequentially with audit sidecar.
 
 Sequential short-circuit (ADR 006 D2): Layer 1 → 2 → 3 → 4. The first
-non-ALLOW verdict short-circuits the chain. Audit is ALWAYS built and
-persisted (D4), even when short-circuited at Layer 1.
+non-ALLOW verdict short-circuits the chain. Audit is ALWAYS built (D4),
+even when short-circuited at Layer 1.
+
+Audit persistence is split across the composer + caller to avoid the
+dedup set silently dropping post-execution updates:
+  - DENY path: composer persists a TERMINAL audit record. The caller
+    does not invoke `update_audit_for_execution` because there's no
+    execution to record.
+  - ALLOW path: composer builds the audit but does NOT persist. The
+    caller is REQUIRED to invoke `update_audit_for_execution` with the
+    tool's outcome and then `persist_audit_record` on the updated
+    record. Both current callers do (action subgraph's `_finalize_audit`
+    and `run_action_step`'s ALLOW branch); a future caller missing
+    this step would lose the audit on the ALLOW path.
 
 Cost ordering (cheap → expensive): tool_authorization (dict lookup,
 sub-ms) → parameter_presence (set diff, sub-ms) → parameter_format
@@ -54,11 +66,18 @@ async def inner_safety_check(
 ) -> InnerSafetyResult:
     """Run Layers 1-4 with sequential short-circuit + audit sidecar.
 
-    Returns a fully-populated InnerSafetyResult. `result.audit` is
-    persisted (idempotent stub) before return — callers do not need to
-    persist it themselves. The returned record is also reachable via
-    `result.audit` for callers that want to attach execution-outcome
-    fields after invoking the tool.
+    Returns a fully-populated InnerSafetyResult. Persistence behavior
+    depends on the verdict:
+      - On DENY, this function PERSISTS a terminal audit record before
+        returning. Callers should not re-persist.
+      - On ALLOW, this function BUILDS but does NOT persist the audit.
+        Callers MUST invoke `update_audit_for_execution(result.audit,
+        succeeded=...)` and then `persist_audit_record(updated)` to
+        record the execution outcome and satisfy D4.
+
+    See module docstring for the rationale (the dedup set keys on
+    audit_id, so persisting twice would silently drop the post-exec
+    update).
     """
     t_start = perf_counter()
     layer_results: list[LayerResult] = []

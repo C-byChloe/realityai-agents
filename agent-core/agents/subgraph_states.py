@@ -118,6 +118,11 @@ class ActionAgentInput(BaseModel):
     user_message: str
     user_id: str
     session_id: str
+    # JWT-derived role (D5) — load-bearing for inner Layer 1's tool
+    # authorization re-check. The default is the most-restricted role
+    # so a missing wiring fails closed: forgetting to populate this
+    # makes Layer 1 deny write tools rather than silently grant them.
+    user_role: str = "student"
 
 
 class ActionAgentOutput(BaseModel):
