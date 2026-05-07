@@ -13,6 +13,7 @@ from agents.action_agent import run_action_agent
 from agents.planning_agent import run_planning_agent
 from agents.query_agent import run_query_agent
 from preprocessing.coref_resolver import make_coref_resolver_node
+from prompts import load_prompt
 from safety.outer.node import outer_safety_check
 from safety.outer.schemas import SafetyDecision
 from state import AgentState
@@ -33,15 +34,10 @@ def _get_llm() -> ChatAnthropic:
 # Node: Intent Classification
 # ---------------------------------------------------------------------------
 
-INTENT_SYSTEM_PROMPT = """\
-You are an intent classifier for a university course management system.
-Given a user message, classify the intent into exactly one of:
-- "action" — the user wants to CREATE, UPDATE, or DELETE something (grades, enrollment, assignments)
-- "query" — the user wants to READ information or get tutoring help (course info, schedules, Q&A)
-- "planning" — the user wants multi-step reasoning (semester planning, prerequisite analysis, course recommendations)
-
-Respond with ONLY a JSON object: {"intent": "<action|query|planning>", "confidence": <0.0-1.0>}
-No other text."""
+# Sourced from prompts/intent_classifier.md — see frontmatter for version,
+# benchmark binding, and audit status. Do not inline edits here; edit the
+# prompt file and bump its version.
+INTENT_SYSTEM_PROMPT = load_prompt("intent_classifier")
 
 
 async def classify_intent(state: AgentState) -> dict:

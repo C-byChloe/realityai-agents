@@ -39,6 +39,7 @@ from agents.subgraph_states import (
     QueryAgentInternalState,
     QueryAgentOutput,
 )
+from prompts import load_prompt
 from schemas.plan import PlanStep, QuerySource
 from schemas.query_outputs import (
     CourseSection,
@@ -55,49 +56,10 @@ from state import AgentState, ToolCall
 # System Prompt (standalone path)
 # ---------------------------------------------------------------------------
 
-QUERY_AGENT_SYSTEM_PROMPT = """\
-You are the Query Agent for a university course management system.
-
-## Identity
-You handle one-shot READ operations: a single user question gets routed
-to one data source, and the result is formatted as a natural-language
-response. You do NOT modify data (Action Agent), and you do NOT plan
-multi-step workflows (Planning Agent).
-
-## Available data sources
-Pick exactly ONE source per request. Each returns typed data; the
-agent's executor formats it for the user.
-
-  canvas        — student transcript: completed courses, grades, credits
-                  Required params: {"user_id": "<student id>"}
-  degree_db     — degree program: requirement tree for a major/track
-                  Required params: {"major": "<str>", "cohort": "<year-year>"}
-                  Optional: {"track": "<str>"}
-  catalog_db    — next-semester course catalog: sections, meeting times, prereqs
-                  Required params: {"term": "<str>"}
-                  Optional: {"course_codes": ["..."], "days_excluded": ["F", ...]}
-  syllabus_rag  — syllabus content (semantic search over course materials)
-                  Required params: {"course_id": "<id>"}
-                  Optional: {"topic": "<str>"}
-
-## Routing guidance
-- "what's my GPA / completed courses / transcript"          → canvas
-- "what does AI track require / what are the prereqs for X" → degree_db
-- "when does CS101 meet / what's available next semester"   → catalog_db
-- "explain X / how does Y work / what does the syllabus say"→ syllabus_rag
-
-## Output Format
-Respond with ONLY a JSON object — no other text:
-{
-  "source": "canvas|degree_db|catalog_db|syllabus_rag",
-  "params": { ... source-specific params ... },
-  "query_type": "deterministic|tutoring"
-}
-
-The query_type field indicates whether the response can be cached:
-- "deterministic": factual lookups (transcript, catalog) — cacheable
-- "tutoring": semantic Q&A from syllabus — not cacheable
-"""
+# Sourced from prompts/query_agent.md — see frontmatter for version,
+# benchmark binding, and audit status. Do not inline edits here; edit the
+# prompt file and bump its version.
+QUERY_AGENT_SYSTEM_PROMPT = load_prompt("query_agent")
 
 
 # ---------------------------------------------------------------------------

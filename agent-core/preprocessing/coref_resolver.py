@@ -33,6 +33,7 @@ from langchain_anthropic import ChatAnthropic
 
 from preprocessing.coref_gate import needs_coref
 from preprocessing.schemas import RewrittenQuery
+from prompts import load_prompt
 
 logger = logging.getLogger(__name__)
 
@@ -45,31 +46,10 @@ CONFIDENCE_FALLBACK_THRESHOLD = float(
 )
 MAX_HISTORY_TURNS = 6  # bound prompt size
 
-COREF_SYSTEM_PROMPT = """\
-You resolve coreferences and ellipsis in academic-advising follow-up queries.
-
-Given:
-- A conversation history (prior user turns + assistant responses)
-- A new user query that may contain pronouns ("it", "that", "those"),
-  definite references ("the course"), or elliptical phrases
-  ("再查一下", "what about Spring?")
-
-Produce:
-- A self-contained rewritten query with all referents made explicit
-- A map of resolved entities
-- A confidence score
-
-Rules:
-1. Preserve user intent exactly. Do NOT add information user did not imply.
-2. If the query is already self-contained, return it unchanged with
-   rewrite_reason="no_rewrite" and confidence ≥ 0.9.
-3. If a referent is genuinely ambiguous (multiple plausible antecedents),
-   pick the most recent and lower confidence (0.4–0.6).
-4. Do NOT resolve into hallucinated entities — if no referent exists in
-   history, leave the pronoun as-is and lower confidence (< 0.5).
-
-Output must conform to the RewrittenQuery schema.
-"""
+# Sourced from prompts/coref_resolver.md — see frontmatter for version,
+# benchmark binding, and audit status. Do not inline edits here; edit the
+# prompt file and bump its version.
+COREF_SYSTEM_PROMPT = load_prompt("coref_resolver")
 
 
 def _get_llm():

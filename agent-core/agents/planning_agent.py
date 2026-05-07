@@ -33,6 +33,7 @@ from typing_extensions import TypedDict
 
 from agents.action_agent import ACTION_TOOLS, run_action_step
 from agents.query_agent import run_query_step
+from prompts import load_prompt
 from reasoning.gap_analysis import compute_unsatisfied
 from reasoning.solver import ConstraintSolver
 from safety.outer.schemas import SessionContext
@@ -49,71 +50,10 @@ from state import AgentState, ToolCall
 # System Prompt — typed Plan emission
 # ---------------------------------------------------------------------------
 
-PLANNING_AGENT_SYSTEM_PROMPT = """\
-You are the Planning Agent for a university course management system. You
-decompose complex multi-step requests into a typed Plan DAG.
-
-## Plan schema
-
-Each step is a JSON object with:
-  - step_id: integer, unique within the plan
-  - description: short natural-language label (for traces only)
-  - depends_on: list of upstream step_ids (use [] for independent steps)
-  - agent_type: one of "query", "reasoning", "action", "constraint_solver"
-
-Per agent_type, populate the matching fields:
-
-  agent_type=query:
-    query_source: one of "canvas", "degree_db", "catalog_db", "syllabus_rag"
-    query_params: source-specific dict (e.g., {"user_id": "u1"})
-
-  agent_type=reasoning:
-    reasoning_inputs: list of upstream step_ids whose outputs are needed
-    reasoning_template: one of "extract_unsatisfied_elective_pool",
-      "explain_schedule_recommendation"
-
-  agent_type=action:
-    action_tool: one of "grade_update", "enrollment_modify", "assignment_create"
-    action_args: tool-specific dict
-
-  agent_type=constraint_solver:
-    solver_type: one of "schedule_csp", "prereq_check"
-    solver_inputs: solver-specific dict; may use "<from_step_N>" to reference
-      upstream typed outputs (e.g., {"candidates": "<from_step_4>"})
-
-## Independence and parallelism
-
-Steps with depends_on=[] run in parallel. Use depends_on only when a step
-genuinely needs an upstream output. Do NOT serialize independent queries.
-
-## Source-Level Query Reformulation (Layer 2)
-
-For each plan step where you set `query_source = "syllabus_rag"`, also set:
-  - `semantic_query`: a reformulated version of the user's intent suitable
-    for vector retrieval. Strip filler words, expand abbreviations, focus
-    on content terms.
-  - `query_expansion` (optional): 2–3 paraphrases if the query is short or
-    vocabulary-mismatched with likely chunk content. Omit for long, specific
-    queries.
-
-For other query sources (`canvas`, `degree_db`, `catalog_db`), do NOT set
-these fields. Their reformulation is captured by the existing typed
-`query_params` fields.
-
-Example:
-  User: "what does the AI class cover"
-  syllabus_rag step:
-    semantic_query: "course content topics covered AI track elective"
-    query_expansion: ["AI course syllabus topics", "artificial intelligence class curriculum"]
-
-## Output format
-
-Respond with a JSON object:
-{
-  "steps": [ <PlanStep>, ... ],
-  "reasoning": "<one-sentence explanation>"
-}
-"""
+# Sourced from prompts/planning_agent.md — see frontmatter for version,
+# benchmark binding, and audit status. Do not inline edits here; edit the
+# prompt file and bump its version.
+PLANNING_AGENT_SYSTEM_PROMPT = load_prompt("planning_agent")
 
 
 # ---------------------------------------------------------------------------

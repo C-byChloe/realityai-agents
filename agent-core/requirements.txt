@@ -29,6 +29,13 @@ passlib[bcrypt]>=1.7.0
 # Utilities
 pydantic>=2.0.0
 python-dotenv>=1.0.0
+pyyaml>=6.0
+
+# Prompt tooling — used by tools/prompt_audit.py for token counting.
+# OpenAI's cl100k_base tokenizer is a close-enough proxy for Claude
+# (within ~10%); used for relative comparisons + threshold checks, not
+# exact billing.
+tiktoken>=0.7.0
 
 # Testing
 pytest>=8.0.0

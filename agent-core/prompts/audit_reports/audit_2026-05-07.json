@@ -1,0 +1,456 @@
+[
+  {
+    "prompt_id": "action_agent",
+    "version": "1.0.0",
+    "overall_severity": "ok",
+    "findings": [
+      {
+        "check": "token_count",
+        "severity": "ok",
+        "detail": "prompt is 249 tokens \u2014 within budget.",
+        "value": 249
+      },
+      {
+        "check": "rules_count",
+        "severity": "ok",
+        "detail": "7 directives.",
+        "value": 7
+      },
+      {
+        "check": "examples_count",
+        "severity": "ok",
+        "detail": "0 examples.",
+        "value": 0
+      },
+      {
+        "check": "shouting_ratio",
+        "severity": "ok",
+        "detail": "0/165 caps tokens (0.0%).",
+        "value": 0.0
+      },
+      {
+        "check": "redundancy",
+        "severity": "ok",
+        "detail": "0/55 sentence pairs overlap (0.0%).",
+        "value": 0.0
+      },
+      {
+        "check": "hardcoded_thresholds",
+        "severity": "ok",
+        "detail": "no threshold-shaped magic numbers in prompt body.",
+        "value": null
+      },
+      {
+        "check": "pii",
+        "severity": "ok",
+        "detail": "no PII patterns.",
+        "value": null
+      },
+      {
+        "check": "internal_identifiers",
+        "severity": "ok",
+        "detail": "no repo-specific identifiers in body.",
+        "value": null
+      },
+      {
+        "check": "sql_or_shell",
+        "severity": "ok",
+        "detail": "no SQL/shell fragments.",
+        "value": null
+      }
+    ],
+    "metrics": {
+      "token_count": 249,
+      "rules_count": 7,
+      "examples_count": 0,
+      "shouting_ratio": 0.0,
+      "shouting_count": 0,
+      "redundancy": 0.0,
+      "hardcoded_thresholds": [],
+      "pii_emails": 0,
+      "pii_phones": 0,
+      "pii_ssns": 0,
+      "internal_identifiers": [],
+      "sql_or_shell": []
+    }
+  },
+  {
+    "prompt_id": "coref_resolver",
+    "version": "1.0.0",
+    "overall_severity": "ok",
+    "findings": [
+      {
+        "check": "token_count",
+        "severity": "ok",
+        "detail": "prompt is 228 tokens \u2014 within budget.",
+        "value": 228
+      },
+      {
+        "check": "rules_count",
+        "severity": "ok",
+        "detail": "9 directives.",
+        "value": 9
+      },
+      {
+        "check": "examples_count",
+        "severity": "ok",
+        "detail": "0 examples.",
+        "value": 0
+      },
+      {
+        "check": "shouting_ratio",
+        "severity": "ok",
+        "detail": "0/144 caps tokens (0.0%).",
+        "value": 0.0
+      },
+      {
+        "check": "redundancy",
+        "severity": "ok",
+        "detail": "0/28 sentence pairs overlap (0.0%).",
+        "value": 0.0
+      },
+      {
+        "check": "hardcoded_thresholds",
+        "severity": "ok",
+        "detail": "no threshold-shaped magic numbers in prompt body.",
+        "value": null
+      },
+      {
+        "check": "pii",
+        "severity": "ok",
+        "detail": "no PII patterns.",
+        "value": null
+      },
+      {
+        "check": "internal_identifiers",
+        "severity": "ok",
+        "detail": "no repo-specific identifiers in body.",
+        "value": null
+      },
+      {
+        "check": "sql_or_shell",
+        "severity": "ok",
+        "detail": "no SQL/shell fragments.",
+        "value": null
+      }
+    ],
+    "metrics": {
+      "token_count": 228,
+      "rules_count": 9,
+      "examples_count": 0,
+      "shouting_ratio": 0.0,
+      "shouting_count": 0,
+      "redundancy": 0.0,
+      "hardcoded_thresholds": [],
+      "pii_emails": 0,
+      "pii_phones": 0,
+      "pii_ssns": 0,
+      "internal_identifiers": [],
+      "sql_or_shell": []
+    }
+  },
+  {
+    "prompt_id": "intent_analyzer",
+    "version": "1.0.0",
+    "overall_severity": "ok",
+    "findings": [
+      {
+        "check": "token_count",
+        "severity": "ok",
+        "detail": "prompt is 204 tokens \u2014 within budget.",
+        "value": 204
+      },
+      {
+        "check": "rules_count",
+        "severity": "ok",
+        "detail": "3 directives.",
+        "value": 3
+      },
+      {
+        "check": "examples_count",
+        "severity": "ok",
+        "detail": "0 examples.",
+        "value": 0
+      },
+      {
+        "check": "shouting_ratio",
+        "severity": "ok",
+        "detail": "0/118 caps tokens (0.0%).",
+        "value": 0.0
+      },
+      {
+        "check": "redundancy",
+        "severity": "ok",
+        "detail": "too few sentences to score.",
+        "value": 0.0
+      },
+      {
+        "check": "hardcoded_thresholds",
+        "severity": "ok",
+        "detail": "no threshold-shaped magic numbers in prompt body.",
+        "value": null
+      },
+      {
+        "check": "pii",
+        "severity": "ok",
+        "detail": "no PII patterns.",
+        "value": null
+      },
+      {
+        "check": "internal_identifiers",
+        "severity": "ok",
+        "detail": "no repo-specific identifiers in body.",
+        "value": null
+      },
+      {
+        "check": "sql_or_shell",
+        "severity": "ok",
+        "detail": "no SQL/shell fragments.",
+        "value": null
+      }
+    ],
+    "metrics": {
+      "token_count": 204,
+      "rules_count": 3,
+      "examples_count": 0,
+      "shouting_ratio": 0.0,
+      "shouting_count": 0,
+      "redundancy": 0.0,
+      "hardcoded_thresholds": [],
+      "pii_emails": 0,
+      "pii_phones": 0,
+      "pii_ssns": 0,
+      "internal_identifiers": [],
+      "sql_or_shell": []
+    }
+  },
+  {
+    "prompt_id": "intent_classifier",
+    "version": "1.0.0",
+    "overall_severity": "ok",
+    "findings": [
+      {
+        "check": "token_count",
+        "severity": "ok",
+        "detail": "prompt is 128 tokens \u2014 within budget.",
+        "value": 128
+      },
+      {
+        "check": "rules_count",
+        "severity": "ok",
+        "detail": "3 directives.",
+        "value": 3
+      },
+      {
+        "check": "examples_count",
+        "severity": "ok",
+        "detail": "0 examples.",
+        "value": 0
+      },
+      {
+        "check": "shouting_ratio",
+        "severity": "ok",
+        "detail": "0/82 caps tokens (0.0%).",
+        "value": 0.0
+      },
+      {
+        "check": "redundancy",
+        "severity": "ok",
+        "detail": "too few sentences to score.",
+        "value": 0.0
+      },
+      {
+        "check": "hardcoded_thresholds",
+        "severity": "ok",
+        "detail": "no threshold-shaped magic numbers in prompt body.",
+        "value": null
+      },
+      {
+        "check": "pii",
+        "severity": "ok",
+        "detail": "no PII patterns.",
+        "value": null
+      },
+      {
+        "check": "internal_identifiers",
+        "severity": "ok",
+        "detail": "no repo-specific identifiers in body.",
+        "value": null
+      },
+      {
+        "check": "sql_or_shell",
+        "severity": "ok",
+        "detail": "no SQL/shell fragments.",
+        "value": null
+      }
+    ],
+    "metrics": {
+      "token_count": 128,
+      "rules_count": 3,
+      "examples_count": 0,
+      "shouting_ratio": 0.0,
+      "shouting_count": 0,
+      "redundancy": 0.0,
+      "hardcoded_thresholds": [],
+      "pii_emails": 0,
+      "pii_phones": 0,
+      "pii_ssns": 0,
+      "internal_identifiers": [],
+      "sql_or_shell": []
+    }
+  },
+  {
+    "prompt_id": "planning_agent",
+    "version": "1.0.0",
+    "overall_severity": "warn",
+    "findings": [
+      {
+        "check": "token_count",
+        "severity": "ok",
+        "detail": "prompt is 571 tokens \u2014 within budget.",
+        "value": 571
+      },
+      {
+        "check": "rules_count",
+        "severity": "ok",
+        "detail": "6 directives.",
+        "value": 6
+      },
+      {
+        "check": "examples_count",
+        "severity": "ok",
+        "detail": "1 examples.",
+        "value": 1
+      },
+      {
+        "check": "shouting_ratio",
+        "severity": "ok",
+        "detail": "0/282 caps tokens (0.0%).",
+        "value": 0.0
+      },
+      {
+        "check": "redundancy",
+        "severity": "ok",
+        "detail": "0/78 sentence pairs overlap (0.0%).",
+        "value": 0.0
+      },
+      {
+        "check": "hardcoded_thresholds",
+        "severity": "ok",
+        "detail": "no threshold-shaped magic numbers in prompt body.",
+        "value": null
+      },
+      {
+        "check": "pii",
+        "severity": "ok",
+        "detail": "no PII patterns.",
+        "value": null
+      },
+      {
+        "check": "internal_identifiers",
+        "severity": "warn",
+        "detail": "prompt mentions repo-specific identifiers: ['u1']. Example IDs in prompts are fine if they're synthetic; real-world IDs (matching mock data or production rows) should be parameterized.",
+        "value": [
+          "u1"
+        ]
+      },
+      {
+        "check": "sql_or_shell",
+        "severity": "ok",
+        "detail": "no SQL/shell fragments.",
+        "value": null
+      }
+    ],
+    "metrics": {
+      "token_count": 571,
+      "rules_count": 6,
+      "examples_count": 1,
+      "shouting_ratio": 0.0,
+      "shouting_count": 0,
+      "redundancy": 0.0,
+      "hardcoded_thresholds": [],
+      "pii_emails": 0,
+      "pii_phones": 0,
+      "pii_ssns": 0,
+      "internal_identifiers": [
+        "u1"
+      ],
+      "sql_or_shell": []
+    }
+  },
+  {
+    "prompt_id": "query_agent",
+    "version": "1.0.0",
+    "overall_severity": "ok",
+    "findings": [
+      {
+        "check": "token_count",
+        "severity": "ok",
+        "detail": "prompt is 448 tokens \u2014 within budget.",
+        "value": 448
+      },
+      {
+        "check": "rules_count",
+        "severity": "ok",
+        "detail": "6 directives.",
+        "value": 6
+      },
+      {
+        "check": "examples_count",
+        "severity": "ok",
+        "detail": "0 examples.",
+        "value": 0
+      },
+      {
+        "check": "shouting_ratio",
+        "severity": "ok",
+        "detail": "0/228 caps tokens (0.0%).",
+        "value": 0.0
+      },
+      {
+        "check": "redundancy",
+        "severity": "ok",
+        "detail": "0/21 sentence pairs overlap (0.0%).",
+        "value": 0.0
+      },
+      {
+        "check": "hardcoded_thresholds",
+        "severity": "ok",
+        "detail": "no threshold-shaped magic numbers in prompt body.",
+        "value": null
+      },
+      {
+        "check": "pii",
+        "severity": "ok",
+        "detail": "no PII patterns.",
+        "value": null
+      },
+      {
+        "check": "internal_identifiers",
+        "severity": "ok",
+        "detail": "no repo-specific identifiers in body.",
+        "value": null
+      },
+      {
+        "check": "sql_or_shell",
+        "severity": "ok",
+        "detail": "no SQL/shell fragments.",
+        "value": null
+      }
+    ],
+    "metrics": {
+      "token_count": 448,
+      "rules_count": 6,
+      "examples_count": 0,
+      "shouting_ratio": 0.0,
+      "shouting_count": 0,
+      "redundancy": 0.0,
+      "hardcoded_thresholds": [],
+      "pii_emails": 0,
+      "pii_phones": 0,
+      "pii_ssns": 0,
+      "internal_identifiers": [],
+      "sql_or_shell": []
+    }
+  }
+]
