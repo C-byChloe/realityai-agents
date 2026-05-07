@@ -175,6 +175,27 @@ def _make_step_node(step: PlanStep):
                     error=str(e),
                 )],
             }
+
+        # Action steps denied by inner safety return a structured dict
+        # rather than raising — surface them as failed ToolCalls so the
+        # plan executor's success flag and trace UI both reflect the
+        # denial without aborting sibling steps.
+        if (
+            step.agent_type is AgentType.ACTION
+            and isinstance(result, dict)
+            and result.get("denied_by_inner_safety")
+        ):
+            return {
+                "step_outputs": {step.step_id: result},
+                "tool_calls": [ToolCall(
+                    tool_name=_step_label(step),
+                    arguments=_step_args(step),
+                    result=_summarize_for_trace(result),
+                    success=False,
+                    error=result.get("message") or result.get("reason_code"),
+                )],
+            }
+
         return {
             "step_outputs": {step.step_id: result},
             "tool_calls": [ToolCall(
@@ -215,7 +236,10 @@ async def _dispatch_step(step: PlanStep, step_outputs: dict[int, Any]) -> Any:
     if step.agent_type is AgentType.QUERY:
         return await asyncio.to_thread(run_query_step, step, step_outputs)
     if step.agent_type is AgentType.ACTION:
-        return await asyncio.to_thread(run_action_step, step, step_outputs)
+        # run_action_step is async (calls inner_safety_check internally
+        # which awaits Layer 4 live-state). The tool_func.invoke inside
+        # is sync and brief — running it on the event loop is fine.
+        return await run_action_step(step, step_outputs)
     if step.agent_type is AgentType.REASONING:
         return await asyncio.to_thread(_run_reasoning_step, step, step_outputs)
     if step.agent_type is AgentType.CONSTRAINT_SOLVER:

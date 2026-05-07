@@ -1,22 +1,27 @@
-"""Action Agent — write/mutation operations behind a 3-gate subgraph.
+"""Action Agent — write/mutation operations behind the inner safety gate.
 
 Internal flow (compiled `StateGraph`):
 
-  route_action → validate_args → execute_action_tool → audit_action
+  route_action → inner_safety_check → execute_action_tool → finalize_audit
 
-`route_action` extracts a tool + arguments from the LLM. `validate_args`
-rejects malformed arguments before they hit gRPC (cheap fail-fast).
-`execute_action_tool` calls the tool (gRPC with mock fallback). `audit_action`
-emits a structured record with an opaque correlation ID.
+`route_action` extracts a tool + arguments from the LLM.
+`inner_safety_check` runs the four-layer inner safety gate (tool
+authorization → parameter presence → parameter format → live state) and
+builds an audit record (D4 — always built, even on DENY). On DENY the
+record is persisted as terminal and execute is skipped. On ALLOW the
+record is built but not persisted; `finalize_audit` updates it with the
+execution outcome and persists the final state.
 
 Internal state (`ActionAgentInternalState`) never leaves the subgraph.
 The orchestrator only sees `ActionAgentOutput` (response + success +
 selected_tool + audit_id).
+
+The plan-driven path (`run_action_step` below) hits the SAME composer
+to close the bypass gap — see ADR 006 D6.
 """
 
 import json
 import os
-import uuid
 from typing import Any
 
 import grpc
@@ -31,6 +36,16 @@ from agents.subgraph_states import (
     ActionAgentOutput,
 )
 from grpc_client.client import CoreServiceClient, GrpcServiceError
+from safety.inner.audit import (
+    persist_audit_record,
+    update_audit_for_execution,
+)
+from safety.inner.node import inner_safety_check
+from safety.inner.schemas import (
+    InnerSafetyDecision,
+    InnerSafetyInput,
+)
+from safety.outer.schemas import SessionContext
 from state import AgentState, ToolCall
 
 # gRPC client — initialized once, shared across tool calls
@@ -186,13 +201,26 @@ ACTION_TOOLS = {
 }
 
 
-def run_action_step(step, step_outputs: dict[int, Any]) -> dict:
-    """Execute a typed action step from a plan.
+async def run_action_step(
+    step,
+    step_outputs: dict[int, Any],
+    *,
+    session: SessionContext | None = None,
+) -> dict:
+    """Execute a typed action step from a plan, gated by inner safety.
 
     Reads `action_tool` + `action_args` directly off the PlanStep — no
-    second LLM pass to re-derive what the planner already decided.
-    Returns the raw tool result dict (the planner's reasoning step
-    produces the final natural-language response).
+    second LLM pass to re-derive what the planner already decided. Then
+    runs the same `inner_safety_check` gate the standalone subgraph uses
+    (closes ADR 006 D6 bypass gap). On DENY: returns a failure dict
+    without ever calling the tool. On ALLOW: invokes the tool, persists
+    the audit with execution outcome.
+
+    The `session` kwarg is the JWT-derived identity (D5). Until the API
+    gateway populates it across the plan executor, we default to a
+    minimal "instructor" session — same fallback choice as outer safety
+    has during the gateway transition. Production wiring (Phase 7) plumbs
+    it through `PlanExecState.session`.
     """
     if not step.action_tool:
         raise ValueError(f"step {step.step_id}: missing action_tool")
@@ -202,20 +230,63 @@ def run_action_step(step, step_outputs: dict[int, Any]) -> dict:
         raise ValueError(f"step {step.step_id}: unknown action_tool {step.action_tool}")
 
     args = step.action_args or {}
-    return tool_func.invoke(args)
+    safety_input = InnerSafetyInput(
+        session=session or _default_plan_session(),
+        tool_name=step.action_tool,
+        tool_args=args,
+    )
+    result = await inner_safety_check(safety_input)
+
+    if result.final_decision == InnerSafetyDecision.DENY:
+        # Surface as a structured failure dict — caller (the plan step
+        # node in planning_agent) converts to ToolCall(success=False).
+        # No tool invocation; the audit record is already persisted as
+        # terminal inside the composer.
+        return {
+            "success": False,
+            "operation": step.action_tool,
+            "denied_by_inner_safety": True,
+            "reason_code": result.final_reason_code,
+            "message": result.final_reason_human,
+            "audit_id": result.audit.audit_id,
+        }
+
+    # ALLOW path — invoke the tool and persist the post-execution audit.
+    try:
+        raw = tool_func.invoke(args)
+        succeeded = bool(raw.get("success", True))
+        error = None if succeeded else raw.get("message")
+    except Exception as e:
+        raw = {"success": False, "operation": step.action_tool, "message": str(e)}
+        succeeded = False
+        error = str(e)
+
+    final_audit = update_audit_for_execution(
+        result.audit, succeeded=succeeded, error=error,
+    )
+    persist_audit_record(final_audit)
+
+    # Surface the audit_id on the result so traces can correlate.
+    raw = {**raw, "audit_id": final_audit.audit_id}
+    return raw
+
+
+def _default_plan_session() -> SessionContext:
+    """Fallback identity for plan-driven actions until PlanExecState
+    carries SessionContext end-to-end. Defaulting to instructor avoids
+    breaking grading/enrollment flows in tests; production wiring (Phase
+    7) replaces this with the JWT-derived role from the gateway.
+    """
+    return SessionContext(
+        user_id="instructor_smith",
+        session_id="plan-driven",
+        user_role="instructor",
+    )
 
 
 # ---------------------------------------------------------------------------
 # Subgraph nodes — internal state hidden behind ActionAgentOutput
 # ---------------------------------------------------------------------------
-
-
-# Required-argument schema per tool. Cheap, no external deps.
-_REQUIRED_ARGS: dict[str, set[str]] = {
-    "grade_update": {"student_id", "course_id", "assignment_id", "grade"},
-    "enrollment_modify": {"student_id", "course_id", "action"},
-    "assignment_create": {"course_id", "title", "due_date"},
-}
 
 
 def _make_route_node(llm):
@@ -255,44 +326,61 @@ def _make_route_node(llm):
     return route_action
 
 
-async def _validate_args(state: ActionAgentInternalState) -> dict:
-    """Gate 1: cheap structural validation before we touch gRPC."""
-    if state.get("response_text"):
-        # Already short-circuited by route (clarification or non-JSON).
-        return {"validation_passed": True, "validation_errors": []}
+async def _inner_safety_node(state: ActionAgentInternalState) -> dict:
+    """Run inner safety Layers 1-4 + audit sidecar (ADR 006).
 
-    tool_name = state.get("selected_tool", "")
+    Mirrors the gate that `run_action_step` calls on the plan path.
+    Skipped on the clarification / non-JSON short-circuit (where the
+    LLM produced no tool selection).
+
+    On DENY: writes `response_text` + `success=False` so subsequent
+    nodes treat the request as terminated; persists the terminal audit
+    record from the composer.
+    On ALLOW: writes `inner_safety_result` so `_execute_action_tool`
+    can attach execution outcome to the audit.
+    """
+    if state.get("response_text") and not state.get("selected_tool"):
+        # Clarification or non-JSON path — no tool to gate.
+        return {}
+
+    tool_name = state.get("selected_tool", "") or ""
     args = state.get("tool_arguments", {}) or {}
-    errors: list[str] = []
 
-    if tool_name not in ACTION_TOOLS:
-        errors.append(f"Unknown tool: {tool_name}")
-    else:
-        required = _REQUIRED_ARGS.get(tool_name, set())
-        missing = required - set(args.keys())
-        if missing:
-            errors.append(f"Missing required arguments for {tool_name}: {sorted(missing)}")
-        if tool_name == "enrollment_modify":
-            action = args.get("action")
-            if action not in {"add", "drop"}:
-                errors.append(f"enrollment_modify.action must be 'add' or 'drop', got {action!r}")
+    safety_input = InnerSafetyInput(
+        session=SessionContext(
+            user_id=state.get("user_id", "instructor_smith"),
+            session_id=state.get("session_id", "subgraph"),
+            # Subgraph runs after outer RBAC has already permitted the
+            # action category for this caller; the standalone path's
+            # default identity is "instructor" (matches the gateway's
+            # post-outer guarantee for write-tier requests).
+            user_role=state.get("user_role", "instructor"),
+        ),
+        tool_name=tool_name,
+        tool_args=args,
+    )
+    result = await inner_safety_check(safety_input)
 
-    if errors:
-        return {
-            "validation_passed": False,
-            "validation_errors": errors,
-            "response_text": "; ".join(errors),
-            "success": False,
-        }
-    return {"validation_passed": True, "validation_errors": []}
+    update: dict[str, Any] = {"inner_safety_result": result}
+    if result.final_decision == InnerSafetyDecision.DENY:
+        update["response_text"] = result.final_reason_human or result.final_reason_code
+        update["success"] = False
+    return update
 
 
 async def _execute_action_tool(state: ActionAgentInternalState) -> dict:
-    """Gate 2: invoke the tool (gRPC with mock fallback)."""
-    if not state.get("validation_passed", False):
-        return {}  # validation already wrote response_text + success
-    if state.get("response_text") and not state.get("selected_tool"):
-        return {}  # short-circuited (clarification path)
+    """Invoke the tool (gRPC with mock fallback) on the ALLOW path only.
+
+    Skipped when:
+      - inner safety denied (response_text + success=False already set)
+      - LLM short-circuited at route (no selected_tool)
+    """
+    inner = state.get("inner_safety_result")
+    if inner is None:
+        # Clarification path — never reached the safety gate.
+        return {}
+    if inner.final_decision == InnerSafetyDecision.DENY:
+        return {}
 
     tool_name = state.get("selected_tool", "")
     args = state.get("tool_arguments", {}) or {}
@@ -309,20 +397,30 @@ async def _execute_action_tool(state: ActionAgentInternalState) -> dict:
         }
 
 
-async def _audit_action(state: ActionAgentInternalState) -> dict:
-    """Gate 3: structured audit record + opaque correlation ID."""
-    audit_id = uuid.uuid4().hex[:12]
-    record = {
-        "audit_id": audit_id,
-        "tool": state.get("selected_tool", ""),
-        "validation_passed": state.get("validation_passed", False),
-        "execution_error": state.get("execution_error"),
-        "success": bool(state.get("success", False)),
-    }
+async def _finalize_audit(state: ActionAgentInternalState) -> dict:
+    """Update the audit record with execution outcome and persist.
 
-    update: dict[str, Any] = {"audit_record": record}
+    On ALLOW path only — the DENY path persisted a terminal record
+    inside the composer. On the clarification path there's no audit at
+    all (no tool was selected).
+    """
+    inner = state.get("inner_safety_result")
+    update: dict[str, Any] = {}
 
-    # If we haven't produced a response yet, build it now from the tool result.
+    if inner is not None and inner.final_decision == InnerSafetyDecision.ALLOW:
+        raw = state.get("raw_tool_result") or {}
+        succeeded = bool(state.get("success", False)) and bool(raw.get("success", True))
+        error = state.get("execution_error") or (
+            None if succeeded else raw.get("message")
+        )
+        final_audit = update_audit_for_execution(
+            inner.audit, succeeded=succeeded, error=error,
+        )
+        persist_audit_record(final_audit)
+        # Replace the audit on the result so callers reading
+        # inner_safety_result.audit see the post-execution state.
+        update["inner_safety_result"] = inner.model_copy(update={"audit": final_audit})
+
     if not state.get("response_text"):
         raw = state.get("raw_tool_result") or {}
         confirmation = state.get("confirmation_text", "")
@@ -333,30 +431,35 @@ async def _audit_action(state: ActionAgentInternalState) -> dict:
 
 
 def compile_action_agent(llm):
-    """Compile the Action Agent subgraph: route → validate → execute → audit."""
+    """Compile the Action Agent subgraph: route → inner_safety → execute → finalize."""
     g = StateGraph(ActionAgentInternalState)
     g.add_node("route_action", _make_route_node(llm))
-    g.add_node("validate_args", _validate_args)
+    g.add_node("inner_safety_check", _inner_safety_node)
     g.add_node("execute_action_tool", _execute_action_tool)
-    g.add_node("audit_action", _audit_action)
+    g.add_node("finalize_audit", _finalize_audit)
     g.add_edge(START, "route_action")
-    g.add_edge("route_action", "validate_args")
-    g.add_edge("validate_args", "execute_action_tool")
-    g.add_edge("execute_action_tool", "audit_action")
-    g.add_edge("audit_action", END)
+    g.add_edge("route_action", "inner_safety_check")
+    g.add_edge("inner_safety_check", "execute_action_tool")
+    g.add_edge("execute_action_tool", "finalize_audit")
+    g.add_edge("finalize_audit", END)
     return g.compile()
 
 
 async def invoke_action_subgraph(inp: ActionAgentInput, llm) -> ActionAgentOutput:
     """Run the subgraph and project to the typed boundary output."""
     subgraph = compile_action_agent(llm)
-    final = await subgraph.ainvoke({"user_message": inp.user_message})
-    record = final.get("audit_record") or {}
+    final = await subgraph.ainvoke({
+        "user_message": inp.user_message,
+        "user_id": inp.user_id,
+        "session_id": inp.session_id,
+    })
+    inner = final.get("inner_safety_result")
+    audit_id = inner.audit.audit_id if inner is not None else ""
     return ActionAgentOutput(
         response=final.get("response_text", ""),
         success=bool(final.get("success", False)),
         selected_tool=final.get("selected_tool", "") or "",
-        audit_id=record.get("audit_id", "") or "",
+        audit_id=audit_id,
     )
 
 

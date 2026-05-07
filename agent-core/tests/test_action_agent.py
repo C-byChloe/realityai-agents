@@ -166,7 +166,13 @@ class TestRunActionAgent:
             },
             "confirmation": "Creating assignment 'Final Project' for CS101",
         })
-        state = _make_state("Create a final project assignment for CS101 due May 15")
+        # Inner safety Layer 4 (live state) verifies the caller is the
+        # course's instructor before allowing assignment_create. The mock
+        # course state lists `instructor_smith` as CS101's instructor.
+        state = _make_state(
+            "Create a final project assignment for CS101 due May 15",
+            user_id="instructor_smith",
+        )
         result = await run_action_agent(state, _mock_llm(llm_response))
 
         assert result["tool_calls"][0].tool_name == "assignment_create"
@@ -192,7 +198,10 @@ class TestRunActionAgent:
         state = _make_state("Delete student S001")
         result = await run_action_agent(state, _mock_llm(llm_response))
 
-        assert "Unknown tool" in result["response"]
+        # Inner safety Layer 1 (tool_authorization) catches unknown tools
+        # via the role × tool matrix. The denial message names the tool
+        # that was rejected; the success flag is False.
+        assert "delete_student" in result["response"]
         assert result["tool_calls"][0].success is False
 
     async def test_handles_malformed_llm_response(self):

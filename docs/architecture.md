@@ -231,6 +231,8 @@ restarts. The graph code does not change; only the saver does.
 | Typed plan DAG with parallel execution | Wired |
 | Subgraph internal-state isolation | Wired |
 | Two-layer safety + HiTL | Wired |
+| Outer safety (3-tier RBAC + static + LLM intent) | Wired |
+| Inner safety (4-layer tool-auth + presence + format + live-state + audit) | Wired in both action paths (standalone subgraph + plan-driven `run_action_step`) |
 | Query rewrite Layer 1 (coref resolver + gate) | Wired |
 | Query rewrite Layer 2 (PlanStep `semantic_query` / `query_expansion`) | Wired |
 | Hybrid retrieval (RRF over vector + keyword) | Implementation wired; data source is mock |

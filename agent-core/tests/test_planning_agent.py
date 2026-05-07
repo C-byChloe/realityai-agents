@@ -220,3 +220,126 @@ class TestDispatchRegistries:
         assert "enrollment_modify" in ACTION_TOOLS
         assert "assignment_create" in ACTION_TOOLS
         assert len(ACTION_TOOLS) == 3
+
+
+# ---------------------------------------------------------------------------
+# Inner safety on the plan path — closes the ADR 006 D6 bypass gap
+# ---------------------------------------------------------------------------
+
+
+class TestActionStepInnerSafety:
+    """Phase 5 cutover: `run_action_step` now runs the same inner safety
+    composer as the standalone subgraph. Before this, plan-driven action
+    steps bypassed every gate including the prototype `_validate_args`
+    in the subgraph — the largest defense-in-depth gap in the codebase.
+
+    These tests pin the closed-gap behavior:
+      - A plan step that would trip Layer 4 (live state, e.g., enrollment
+        to a full course) surfaces as ToolCall(success=False, error=...);
+        the gRPC call is never made.
+      - Sibling steps in the same plan continue to execute — denial of
+        one step does not abort the rest of the DAG.
+    """
+
+    async def test_action_step_denied_by_live_state_surfaces_as_failure(self):
+        """CS401 is at capacity 30/30 in the mock world state. Layer 4
+        denies the enrollment_modify add → ToolCall.success=False, no
+        underlying tool invocation, no exception bubble.
+        """
+        plan = {
+            "steps": [{
+                "step_id": 1,
+                "description": "enroll S100 in CS401 (full course)",
+                "depends_on": [],
+                "agent_type": "action",
+                "action_tool": "enrollment_modify",
+                "action_args": {
+                    "student_id": "S100",
+                    "course_id": "CS401",
+                    "action": "add",
+                },
+            }],
+            "reasoning": "Should be blocked at Layer 4.",
+        }
+        state = _make_state("enroll me in CS401")
+        result = await run_planning_agent(state, _mock_llm(json.dumps(plan)))
+
+        assert len(result["tool_calls"]) == 1
+        tc = result["tool_calls"][0]
+        assert tc.success is False
+        # The reason text comes from check_live_state's "course_full" verdict.
+        assert tc.error and "capacity" in tc.error.lower()
+
+    async def test_denied_action_step_does_not_block_sibling_steps(self):
+        """A plan with two independent steps — one action that gets
+        denied at Layer 4, one query that should still run — must
+        execute both in the same superstep. Denial cannot cascade.
+        """
+        plan = {
+            "steps": [
+                {
+                    "step_id": 1,
+                    "description": "denied action",
+                    "depends_on": [],
+                    "agent_type": "action",
+                    "action_tool": "enrollment_modify",
+                    "action_args": {
+                        "student_id": "S100",
+                        "course_id": "CS401",
+                        "action": "add",
+                    },
+                },
+                {
+                    "step_id": 2,
+                    "description": "independent query",
+                    "depends_on": [],
+                    "agent_type": "query",
+                    "query_source": "canvas",
+                    "query_params": {"user_id": "test-user"},
+                },
+            ],
+            "reasoning": "Sibling step must still run.",
+        }
+        state = _make_state("do two things")
+        result = await run_planning_agent(state, _mock_llm(json.dumps(plan)))
+
+        assert len(result["tool_calls"]) == 2
+        # The action step is failed; the query step is independent and
+        # must produce its own ToolCall (success or otherwise — point is
+        # the dispatcher reached it).
+        labels = [tc.tool_name for tc in result["tool_calls"]]
+        assert "enrollment_modify" in labels
+        assert any("canvas" in l for l in labels)
+        action_tc = next(tc for tc in result["tool_calls"] if tc.tool_name == "enrollment_modify")
+        assert action_tc.success is False
+
+    async def test_allowed_action_step_invokes_tool_and_records_audit(self):
+        """Happy path: plan step passes all four layers → tool runs,
+        audit is persisted with execution_attempted=True.
+        """
+        plan = {
+            "steps": [{
+                "step_id": 1,
+                "description": "drop CS101",
+                "depends_on": [],
+                "agent_type": "action",
+                "action_tool": "enrollment_modify",
+                "action_args": {
+                    "student_id": "S001",  # enrolled in CS101 per mock state
+                    "course_id": "CS101",
+                    "action": "drop",
+                },
+            }],
+            "reasoning": "All four layers should pass.",
+        }
+        state = _make_state("drop CS101")
+        result = await run_planning_agent(state, _mock_llm(json.dumps(plan)))
+
+        assert len(result["tool_calls"]) == 1
+        tc = result["tool_calls"][0]
+        assert tc.success is True
+        # The step output dict carries the audit_id correlator.
+        step_outputs = result["step_outputs"]
+        assert 1 in step_outputs
+        assert "audit_id" in step_outputs[1]
+        assert len(step_outputs[1]["audit_id"]) == 12

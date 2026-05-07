@@ -85,12 +85,15 @@ QUERY_INTERNAL_ONLY_KEYS: frozenset[str] = frozenset({
 class ActionAgentInternalState(TypedDict, total=False):
     """Working memory for the Action Agent subgraph. Internal-only.
 
-    The 3-gate flow (validate → execute → audit) leaves typed traces
-    on this state so each gate can be inspected during debug. None of
-    these fields appear in `ActionAgentOutput`.
+    The 4-gate flow (route → inner_safety → execute → finalize_audit)
+    leaves typed traces on this state so each gate can be inspected
+    during debug. None of these fields appear in `ActionAgentOutput`.
     """
 
     user_message: str
+    user_id: str
+    session_id: str
+    user_role: str
 
     # Routing
     route_decision: dict
@@ -98,16 +101,13 @@ class ActionAgentInternalState(TypedDict, total=False):
     tool_arguments: dict
     confirmation_text: str
 
-    # Validate gate
-    validation_passed: bool
-    validation_errors: list[str]
+    # Inner safety gate (ADR 006) — replaces legacy validation_passed/errors.
+    # Carries layer_results + audit; final_decision is the gate outcome.
+    inner_safety_result: object  # InnerSafetyResult; typed via runtime check
 
     # Execute gate
     raw_tool_result: dict
     execution_error: str | None
-
-    # Audit gate
-    audit_record: dict
 
     # Output
     response_text: str
@@ -133,10 +133,8 @@ ACTION_INTERNAL_ONLY_KEYS: frozenset[str] = frozenset({
     "route_decision",
     "tool_arguments",
     "confirmation_text",
-    "validation_passed",
-    "validation_errors",
+    "inner_safety_result",
     "raw_tool_result",
     "execution_error",
-    "audit_record",
     "response_text",
 })
