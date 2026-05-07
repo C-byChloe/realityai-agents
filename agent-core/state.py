@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 from typing_extensions import TypedDict
 
 from preprocessing.schemas import RewrittenQuery
+from safety.inner.schemas import InnerSafetyResult
 from safety.outer.schemas import OuterSafetyResult
 from schemas.plan import PlanStep
 
@@ -61,6 +62,12 @@ class AgentState(TypedDict, total=False):
     # Populated by `outer_safety_check` node; consumed by the
     # `_route_after_outer_safety` conditional edge.
     outer_safety_result: OuterSafetyResult | None
+
+    # Inner safety result (4-tier sequential + audit sidecar — ADR 006).
+    # Populated by inner_safety_check inside the action subgraph and the
+    # plan-driven action path. Carries an audit_record that is always
+    # populated even on DENY (D4 invariant).
+    inner_safety_result: InnerSafetyResult | None
 
     # Coref resolver output (Layer 1 of query rewrite). Populated by
     # `coref_resolver_node` between safety_check and execution. Both fields
