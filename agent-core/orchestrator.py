@@ -88,14 +88,17 @@ async def route_to_agent(state: AgentState) -> dict:
 # ---------------------------------------------------------------------------
 
 async def outer_safety_node(state: AgentState) -> dict:
-    """Wrap `outer_safety_check` to inject the production LLM client.
+    """Wrap `outer_safety_check` to inject the production PromptGuard.
 
-    Tier 1 (RBAC) and Tier 2 (static rules) don't need an LLM; only
-    Tier 3 (intent analyzer) does. The LLM is constructed via
-    `_get_llm()` at request time so tests that monkeypatch `_get_llm`
-    can swap it out.
+    Tier 1 (RBAC) and Tier 2 (static rules) don't need a model; only
+    Tier 3 (injection guard) does. We pass `prompt_guard=None` so the
+    composer resolves the process-default via `get_default_prompt_guard`
+    — which uses LocalPromptGuardClient in production (transformers
+    installed) and HeuristicPromptGuardClient in dev/CI. Tests inject
+    their own client by calling `outer_safety_check` directly with a
+    `prompt_guard=` kwarg.
     """
-    return await outer_safety_check(state, _get_llm())
+    return await outer_safety_check(state, prompt_guard=None)
 
 
 # ---------------------------------------------------------------------------

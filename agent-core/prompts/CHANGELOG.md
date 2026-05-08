@@ -8,6 +8,22 @@ delta for non-trivial edits.
 
 ---
 
+## 2026-05-07 — Phase 7: Tier 3 architecture swap (intent_analyzer retired)
+
+| Prompt | Change | Reason |
+|---|---|---|
+| `intent_analyzer` | **Retired** (moved to `_retired/intent_analyzer.md`) | Tier 3 of outer safety swapped from Claude Sonnet to Meta Prompt Guard 2 86M. Tier 3's job is binary injection classification, not general safety reasoning — a 70B+ general LLM was overkill (~800ms, ~$0.003/call, 5 distinct API failure modes all routing to FLAG). Replaced by `safety/outer/prompt_guard.py` (real model in production, deterministic heuristic fallback in dev/CI) + `safety/outer/injection_guard.py` (Tier 3 entry point). |
+
+**Eval deltas:**
+- Outer safety smoke eval becomes **deterministic** — no `ANTHROPIC_API_KEY` required, suitable as a CI gate.
+- 5 failure modes → 2: classifier failures collapse from {timeout, generic exception, JSONDecodeError, schema violation, low confidence} down to {timeout, exception}. JSON parsing + schema negotiation eliminated because the classifier returns typed Pydantic.
+- Latency: ~800ms → ~50ms (real model on M-series CPU; ~sub-ms on heuristic).
+
+**Registry:** dropped `intent_analyzer` row.
+**Loader:** refuses to load anything from `_retired/` with a retirement-specific FileNotFoundError.
+
+---
+
 ## 2026-05-07 — First bench cycle
 
 `tools/prompt_bench.py` shipped. First run wires two of the four bench

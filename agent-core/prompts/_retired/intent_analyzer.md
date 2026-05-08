@@ -39,6 +39,19 @@ changelog:
     change: Extracted from safety/outer/intent_analyzer.py inline constant.
     why: Make prompt a first-class versioned artifact with audit metadata.
     eval_delta: none — pure refactor, behavior identical.
+  - version: 1.0.0-retired
+    date: 2026-05-07
+    change: retired
+    why: |
+      Tier 3's job is binary injection classification, not general safety
+      reasoning. Replaced by Meta Prompt Guard 2 86M (specialized
+      classifier, ~16x faster, ~30x cheaper, higher F1 on injection
+      task). New tier implementation: `safety/outer/injection_guard.py`
+      backed by `safety/outer/prompt_guard.py`. No prompt artifact —
+      the model is self-contained. See Phase 7 entry in CHANGELOG.md.
+    eval_delta: |
+      Outer smoke eval becomes deterministic (no LLM call), 10/10 on
+      heuristic fallback. Suitable as a CI gate.
 ---
 
 You are a security analyzer for a university course management agent.

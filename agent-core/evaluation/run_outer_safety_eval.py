@@ -3,16 +3,16 @@
 Run: ``python -m evaluation.run_outer_safety_eval``
 
 Iterates `outer_safety_smoke_eval.jsonl`, calls `outer_safety_check`
-on each case with a real LLM, and produces a per-tier confusion matrix
-in `evaluation/outer_safety_smoke_baseline.md`.
+on each case, and produces a per-tier confusion matrix in
+`evaluation/outer_safety_smoke_baseline.md`.
 
 The report answers three questions in addition to overall accuracy:
 
   1. **Per-tier attribution** — Of the cases that should be caught at
-     each tier (RBAC / static rules / intent analyzer), how many were
-     actually caught at the expected tier? A misalignment (e.g., LLM
-     analyzer catching a lexical pattern that should have been a static
-     rule) is a signal that the rule set has gaps.
+     each tier (RBAC / static rules / injection guard), how many were
+     actually caught at the expected tier? A misalignment (e.g., the
+     injection guard catching a lexical pattern that should have been a
+     static rule) is a signal that the rule set has gaps.
 
   2. **Defense-in-depth coverage** — Of the cases that should NOT be
      ALLOW, how many got blocked by *any* tier? This is the safety-net
@@ -23,9 +23,11 @@ The report answers three questions in addition to overall accuracy:
      correctly allowed? FLAG-on-allow is a false positive that costs
      human review; DENY-on-allow is a hard failure.
 
-Requires `ANTHROPIC_API_KEY`. Treat the report as a development-time
-signal, not a CI gate — Tier 3 is a real LLM and verdicts will vary
-slightly across runs.
+Phase 7 made this runner **deterministic**: Tier 3 is now Prompt Guard
+(a specialized injection classifier) instead of Claude. The runner uses
+`get_default_prompt_guard()` which falls back to the heuristic client
+when transformers isn't installed — so this script can run in CI
+without an `ANTHROPIC_API_KEY` and without GPU. Suitable as a CI gate.
 """
 
 from __future__ import annotations
@@ -40,10 +42,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import HumanMessage
 
 from safety.outer.node import outer_safety_check
+from safety.outer.prompt_guard import get_default_prompt_guard
 from safety.outer.schemas import SafetyDecision
 
 EVAL_PATH = Path(__file__).parent / "outer_safety_smoke_eval.jsonl"
@@ -71,17 +73,9 @@ def _make_state(case: dict) -> dict:
     }
 
 
-def _llm() -> ChatAnthropic:
-    return ChatAnthropic(
-        model="claude-sonnet-4-20250514",
-        api_key=os.getenv("ANTHROPIC_API_KEY", ""),
-        temperature=0,
-    )
-
-
-async def _run_case(case: dict, llm) -> dict[str, Any]:
+async def _run_case(case: dict, prompt_guard) -> dict[str, Any]:
     state = _make_state(case)
-    out = await outer_safety_check(state, llm)
+    out = await outer_safety_check(state, prompt_guard=prompt_guard)
     result = out["outer_safety_result"]
     return {
         "id": case["id"],
@@ -118,7 +112,7 @@ def _decision_match_rate(results: list[dict], expected: str) -> tuple[int, int]:
 
 def _tier_attribution_table(results: list[dict]) -> str:
     """Per-tier table: cases short-circuited there + were they expected to be?"""
-    tiers = ["rbac", "static_rules", "intent_analyzer"]
+    tiers = ["rbac", "static_rules", "injection_guard"]
     lines = [
         "| Tier | Caught (actual SC) | Expected to catch | Aligned (caught + expected here) |",
         "|------|:------------------:|:-----------------:|:--------------------------------:|",
@@ -216,9 +210,13 @@ need a new pattern.
 
 ## Methodology + honest limitations
 
-- 10 cases, hand-curated to cover each tier's expected catch.
-- Tier 3 uses the production LLM (claude-sonnet); verdicts vary slightly
-  run-to-run. This is a smoke-eval baseline, not a regression gate.
+- 10 cases, hand-curated to cover each tier's expected catch + the
+  Phase 4 (student-action defer-to-inner) and Phase 7 (Prompt Guard)
+  architectural decisions.
+- Tier 3 is Prompt Guard (heuristic fallback in this dev env;
+  `LocalPromptGuardClient` with the real model in production). With the
+  heuristic, the runner is fully deterministic and suitable as a CI
+  gate. With the real model, verdicts may vary slightly run-to-run.
 - ALLOW cases are benign by construction; we do NOT have adversarial
   cases that should be ALLOW (i.e., injection-resistant authentic
   requests). Production-grade adversarial eval is out of scope here.
@@ -230,23 +228,13 @@ need a new pattern.
 
 
 async def main() -> int:
-    if not os.getenv("ANTHROPIC_API_KEY"):
-        print(
-            "ANTHROPIC_API_KEY is not set. The smoke eval requires a real LLM "
-            "for Tier 3. Set the env var or use the unit tests "
-            "(tests/test_outer_safety_*.py) for offline checks.",
-            file=sys.stderr,
-        )
-        return 1
-
     cases = _load_cases()
-    llm = _llm()
-    results = await asyncio.gather(*[_run_case(c, llm) for c in cases])
+    prompt_guard = get_default_prompt_guard()
+    results = await asyncio.gather(*[_run_case(c, prompt_guard) for c in cases])
 
     report = _build_report(list(results))
     REPORT_PATH.write_text(report)
 
-    # Console summary
     n = len(results)
     correct_decision = sum(
         1 for r in results if r["actual_decision"] == r["expected_decision"]
@@ -256,11 +244,18 @@ async def main() -> int:
         for r in results
         if r["actual_short_circuit_at"] == r["expected_short_circuit_at"]
     )
-    print(f"Outer-safety smoke eval — {n} cases")
+    pg_kind = type(prompt_guard).__name__
+
+    print(f"Outer-safety smoke eval — {n} cases (deterministic, {pg_kind})")
     print(f"  Decision match: {correct_decision}/{n}")
     print(f"  Tier attribution match: {correct_sc}/{n}")
     print(f"  Report: {REPORT_PATH}")
-    return 0
+
+    # Non-zero exit on any case failure — usable as a CI gate. Tier 1 + 2
+    # are deterministic by definition; Tier 3's heuristic fallback is also
+    # deterministic. With LocalPromptGuardClient (real model) verdicts can
+    # vary slightly run-to-run; the report doc notes that limitation.
+    return 0 if (correct_decision == n and correct_sc == n) else 1
 
 
 if __name__ == "__main__":

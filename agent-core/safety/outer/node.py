@@ -1,11 +1,17 @@
 """LangGraph node entry point for the outer safety gate.
 
-Sequentially runs Tier 1 (RBAC) → Tier 2 (static rules) → Tier 3 (LLM
-intent analyzer), short-circuiting on the first non-ALLOW decision.
+Sequentially runs Tier 1 (RBAC) → Tier 2 (static rules) → Tier 3
+(injection guard), short-circuiting on the first non-ALLOW decision.
 
 A normal request walks all three tiers (small ms). A request blocked by
-RBAC pays Tier 1 only and never burns Tier 3 token cost — that's the
+RBAC pays Tier 1 only and never burns Tier 3 inference cost — that's the
 point of cost-aware sequential ordering (ADR 005 D3).
+
+Phase 7 replaced Tier 3's Claude-based intent_analyzer with the Prompt
+Guard injection_guard (~50ms vs ~800ms; specialized classifier for the
+binary injection-detection task). See safety/outer/prompt_guard.py for
+the dual-implementation pattern (real model in production, heuristic
+fallback in dev/CI).
 
 Reads from state:
   - messages: list[BaseMessage]   — last entry is current turn
@@ -27,7 +33,11 @@ from __future__ import annotations
 from time import perf_counter
 from typing import Any
 
-from safety.outer.intent_analyzer import analyze_intent
+from safety.outer.injection_guard import check_injection
+from safety.outer.prompt_guard import (
+    PromptGuardClient,
+    get_default_prompt_guard,
+)
 from safety.outer.rbac import check_rbac
 from safety.outer.schemas import (
     OuterSafetyInput,
@@ -107,13 +117,26 @@ def _all_allowed(
     }
 
 
-async def outer_safety_check(state: dict[str, Any], llm) -> dict[str, Any]:
-    """Run RBAC → static rules → LLM intent analyzer sequentially.
+async def outer_safety_check(
+    state: dict[str, Any],
+    prompt_guard: PromptGuardClient | None = None,
+) -> dict[str, Any]:
+    """Run RBAC → static rules → injection guard sequentially.
 
-    The LLM is injected so callers (orchestrator at runtime, tests with
-    mocks) can supply their own client. Tier 1+2 don't need it; only
-    Tier 3 calls it.
+    The PromptGuardClient is injected so callers (orchestrator at
+    runtime, tests with mocks) can supply their own. Tiers 1+2 don't
+    need it; only Tier 3 calls it. When omitted, falls back to the
+    process-default client (`get_default_prompt_guard`) which loads the
+    real model if `transformers` is installed and otherwise uses the
+    heuristic dev fallback.
+
+    Backward-compat note: prior to Phase 7 this signature took an `llm`
+    positional arg. The intent_analyzer was retired; passing an LLM is
+    no longer meaningful. New callers pass `prompt_guard=` by keyword.
     """
+    if prompt_guard is None:
+        prompt_guard = get_default_prompt_guard()
+
     safety_input = _build_input(state)
     tier_results: list[TierResult] = []
     t_start = perf_counter()
@@ -130,8 +153,9 @@ async def outer_safety_check(state: dict[str, Any], llm) -> dict[str, Any]:
     if r2.decision != SafetyDecision.ALLOW:
         return _short_circuit(tier_results, r2, t_start)
 
-    # Tier 3 — LLM intent analyzer (~800ms cold, async).
-    r3 = await analyze_intent(safety_input, llm)
+    # Tier 3 — Prompt Guard injection classifier (~50ms real model,
+    # sub-ms heuristic fallback).
+    r3 = await check_injection(safety_input, prompt_guard)
     tier_results.append(r3)
     if r3.decision != SafetyDecision.ALLOW:
         return _short_circuit(tier_results, r3, t_start)

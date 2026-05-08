@@ -53,23 +53,59 @@ def _state(msg: str) -> dict:
 
 
 def _flagged_action_llm() -> AsyncMock:
-    """LLM script: intent classifier → outer-safety Tier 3 returns FLAG →
-    (graph pauses) → resume → action agent route_query.
+    """LLM script for the post-pause path only. Phase 7 retired the
+    Tier 3 LLM analyzer in favor of Prompt Guard, so the LLM queue no
+    longer includes a tier3 response. Tier 3 FLAG is injected via
+    `_flag_prompt_guard()` instead — see `_patch_for_flagged_action`.
+
+    Sequence consumed:
+      1. classify_intent
+      2. coref_resolver gate (only if pronouns; usually no-op)
+      3. (after resume) action_agent route_action
+      4. (defensive duplicate in case route is re-entered)
     """
     intent = AIMessage(content=json.dumps({"intent": "action", "confidence": 0.95}))
-    tier3_flag = AIMessage(content=json.dumps({
-        "decision": "flag_for_review",
-        "confidence": 0.85,
-        "reason": "high-risk write operation requires confirmation",
-    }))
     action_response = AIMessage(content=json.dumps({
         "tool": "enrollment_modify",
         "arguments": {"student_id": "S001", "course_id": "CS201", "action": "add"},
         "confirmation": "Enroll in CS201",
     }))
     mock = AsyncMock()
-    mock.ainvoke.side_effect = [intent, tier3_flag, action_response, action_response]
+    mock.ainvoke.side_effect = [intent, action_response, action_response]
     return mock
+
+
+def _flag_prompt_guard() -> AsyncMock:
+    """Fake Prompt Guard returning a borderline-injection score (0.7),
+    which `injection_guard` maps to FLAG_FOR_REVIEW. Used to deterministically
+    trigger HiTL pause without depending on the heuristic's exact
+    threshold for any specific input phrasing.
+    """
+    from safety.outer.prompt_guard import PromptGuardLabel, PromptGuardResult
+
+    fake = AsyncMock()
+    fake.classify.return_value = PromptGuardResult(
+        label=PromptGuardLabel.INJECTION, score=0.7
+    )
+    return fake
+
+
+def _patch_for_flagged_action(llm_mock: AsyncMock):
+    """Helper context manager that patches BOTH _get_llm (for downstream
+    agent calls) and the default Prompt Guard (for outer Tier 3 FLAG).
+    Tests use it instead of two stacked `with` blocks.
+    """
+    import contextlib
+
+    @contextlib.contextmanager
+    def _patcher():
+        with patch("orchestrator._get_llm", return_value=llm_mock), patch(
+            "safety.outer.node.get_default_prompt_guard",
+            return_value=_flag_prompt_guard(),
+        ):
+            yield
+
+    return _patcher()
 
 
 def _config(thread_id: str) -> dict:
@@ -86,7 +122,7 @@ async def test_flagged_request_pauses_before_hitl_approval():
     app = create_app()
     cfg = _config("hitl-pause-1")
 
-    with patch("orchestrator._get_llm", return_value=_flagged_action_llm()):
+    with _patch_for_flagged_action(_flagged_action_llm()):
         result = await app.ainvoke(_state("Enroll me in CS201"), config=cfg)
 
     # The graph paused — final response is not generated yet.
@@ -109,7 +145,7 @@ async def test_resume_approved_continues_into_execution():
     app = create_app()
     cfg = _config("hitl-approve-2")
 
-    with patch("orchestrator._get_llm", return_value=_flagged_action_llm()):
+    with _patch_for_flagged_action(_flagged_action_llm()):
         # 1. Initial invocation pauses before hitl_approval
         await app.ainvoke(_state("Enroll me in CS201"), config=cfg)
         # 2. Resume with approval — graph runs hitl_approval, then routes to
@@ -130,7 +166,7 @@ async def test_resume_rejected_does_not_execute():
     app = create_app()
     cfg = _config("hitl-reject-3")
 
-    with patch("orchestrator._get_llm", return_value=_flagged_action_llm()):
+    with _patch_for_flagged_action(_flagged_action_llm()):
         await app.ainvoke(_state("Enroll me in CS201"), config=cfg)
         final = await app.ainvoke(Command(resume={"approved": False}), config=cfg)
 
@@ -152,9 +188,9 @@ async def test_two_threads_have_isolated_pauses():
     cfg_b = _config("hitl-iso-b")
 
     # Need separate LLM scripts because the side_effect list is consumed.
-    with patch("orchestrator._get_llm", return_value=_flagged_action_llm()):
+    with _patch_for_flagged_action(_flagged_action_llm()):
         await app.ainvoke(_state("Enroll A in CS201"), config=cfg_a)
-    with patch("orchestrator._get_llm", return_value=_flagged_action_llm()):
+    with _patch_for_flagged_action(_flagged_action_llm()):
         await app.ainvoke(_state("Enroll B in MATH200"), config=cfg_b)
 
     # Both paused independently
@@ -164,7 +200,7 @@ async def test_two_threads_have_isolated_pauses():
     assert "hitl_approval" in snap_b.next
 
     # Resume thread A only
-    with patch("orchestrator._get_llm", return_value=_flagged_action_llm()):
+    with _patch_for_flagged_action(_flagged_action_llm()):
         await app.ainvoke(Command(resume={"approved": False}), config=cfg_a)
 
     # Thread B is still paused

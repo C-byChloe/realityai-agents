@@ -62,6 +62,17 @@ def _load_cached(prompt_id: str) -> dict:
 
 
 def _parse(path: Path) -> dict:
+    # If the canonical file is missing but a same-named prompt exists
+    # under `_retired/`, surface the retirement explicitly. Prevents a
+    # silent FileNotFoundError from masking the fact that the prompt
+    # was deliberately retired and the call site needs updating.
+    retired_path = _PROMPTS_DIR / "_retired" / path.name
+    if not path.exists() and retired_path.exists():
+        raise FileNotFoundError(
+            f"prompt {path.stem!r} was retired (see prompts/_retired/{path.name}). "
+            f"Update the call site to use the replacement, or restore the prompt "
+            f"to {path} explicitly if revival is intentional."
+        )
     if not path.exists():
         raise FileNotFoundError(f"prompt not found: {path.stem} ({path})")
     text = path.read_text(encoding="utf-8")

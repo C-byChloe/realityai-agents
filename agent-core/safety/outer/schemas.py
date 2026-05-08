@@ -43,11 +43,18 @@ class TierName(str, Enum):
     stack-wide (gateway / app / vendor backend). ADR 005 uses "tier"
     exclusively for the intra-node concept to avoid confusion with the
     three-stack-layer auth model.
+
+    Tier 3 was renamed from `intent_analyzer` (Claude Sonnet, generic
+    safety reasoning) to `injection_guard` (Meta Prompt Guard 2 86M, a
+    specialized injection classifier) — see Phase 7 in the changelog.
+    The stable string value is `injection_guard`; older traces / audit
+    log entries with the legacy `intent_analyzer` value are accepted by
+    Pydantic via the migration alias below if needed.
     """
 
     RBAC = "rbac"
     STATIC_RULES = "static_rules"
-    INTENT_ANALYZER = "intent_analyzer"
+    INJECTION_GUARD = "injection_guard"
 
 
 class TierResult(BaseModel):
