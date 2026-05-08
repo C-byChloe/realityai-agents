@@ -11,9 +11,9 @@ in a future iteration).
 |---|---|---|---|---|---|---|---|
 | [intent_classifier](intent_classifier.md) | 1.0.0 | wenwen | `orchestrator.classify_intent` | trace_eval_set | **100%** (12/12) | ok | 2026-05-07 |
 | [coref_resolver](coref_resolver.md) | 1.0.0 | wenwen | `preprocessing.coref_resolver.make_coref_resolver_node` | coref_eval_set | _not yet wired_ | ok | 2026-05-07 |
-| [query_agent](query_agent.md) | 1.0.0 | wenwen | `agents.query_agent._make_route_node` | trace_eval_set | **100%** (12/12) | ok | 2026-05-07 |
+| [query_agent](query_agent.md) | 1.1.0 | wenwen | `agents.query_agent._make_route_node` | trace_eval_set | **100%** (12/12) | ok | 2026-05-08 |
 | [action_agent](action_agent.md) | 1.0.0 | wenwen | `agents.action_agent._make_route_node` | inner_safety_smoke_eval | **100%** (10/10) | ok | 2026-05-07 |
-| [planning_agent](planning_agent.md) | 1.0.0 | wenwen | `agents.planning_agent.make_plan` | trace_eval_set | **100%** (12/12) | warn (accepted) | 2026-05-07 |
+| [planning_agent](planning_agent.md) | 1.1.0 | wenwen | `agents.planning_agent.make_plan` | trace_eval_set | **100%** (12/12) | warn (accepted) | 2026-05-08 |
 
 Latest full audit report: [`audit_reports/audit_2026-05-07.json`](audit_reports/audit_2026-05-07.json).
 Bench history per prompt: [`bench_history/<id>.jsonl`](bench_history/).

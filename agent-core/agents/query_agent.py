@@ -406,9 +406,24 @@ def _format_typed_result(result: Any) -> str:
                 )
             return "\n".join(lines)
         if isinstance(first, SyllabusChunk):
+            # Indirect-injection defense (spotlighting, Hines et al. 2024):
+            # wrap retrieved syllabus content in BEGIN-DATA / END-DATA
+            # markers carrying a per-call nonce. Downstream LLMs that
+            # consume conversation_history (Tier 4 judges, future
+            # summarization templates) are instructed via system prompt
+            # to treat marker-bounded content as data, never as
+            # directives. The nonce makes the boundary unforgeable —
+            # an attacker who plants `[END-DATA:abc]` in their syllabus
+            # cannot predict the request's actual nonce.
+            from safety.content_isolation import new_nonce, wrap_untrusted
+
+            nonce = new_nonce()
             lines = [f"Retrieved {len(result)} syllabus excerpt(s):"]
             for ch in result:
-                lines.append(f"  [{ch.course_id}] {ch.content}")
+                wrapped = wrap_untrusted(
+                    f"[{ch.course_id}] {ch.content}", nonce=nonce
+                )
+                lines.append(wrapped)
             return "\n".join(lines)
 
     # Fallback — should not happen if handlers stay aligned with formatters

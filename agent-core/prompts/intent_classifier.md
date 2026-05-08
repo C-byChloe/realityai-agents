@@ -10,7 +10,7 @@ performance:
   benchmark: evaluation/trace_eval_set.jsonl
   metric: intent_match_rate
   latest_score: 1.0
-  measured_at: 2026-05-07T22:27:28.321752+00:00
+  measured_at: 2026-05-08T00:41:43.074502+00:00
   notes: |
     The 12-scenario trace eval covers all three intents but is not
     intent-classification-specific. A dedicated benchmark would

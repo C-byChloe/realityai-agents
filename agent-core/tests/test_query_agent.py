@@ -249,5 +249,59 @@ class TestFormatTypedResult:
         assert "CS101" in out
         assert "programming fundamentals" in out
 
+    def test_syllabus_chunks_are_wrapped_in_data_markers(self):
+        """Phase 8.1 indirect-injection defense: every retrieved chunk
+        is wrapped in `[BEGIN-DATA:nonce]` / `[END-DATA:nonce]`
+        spotlighting markers so downstream LLM consumers (instructed
+        by the system prompt) treat the content as data, not directives.
+        Pins the formatter wire-in against accidental regression.
+        """
+        import re
+
+        chunks = [
+            SyllabusChunk(
+                chunk_id="DOC001", course_id="CS101",
+                content="Topics include arrays and lists.",
+                score=0.9,
+            ),
+            SyllabusChunk(
+                chunk_id="DOC002", course_id="CS101",
+                content="Prerequisites: MATH200.",
+                score=0.85,
+            ),
+        ]
+        out = _format_typed_result(chunks)
+
+        # Both chunks wrapped — one BEGIN/END pair per chunk.
+        begins = re.findall(r"\[BEGIN-DATA:[0-9a-f]+\]", out)
+        ends = re.findall(r"\[END-DATA:[0-9a-f]+\]", out)
+        assert len(begins) == 2
+        assert len(ends) == 2
+        # Markers in one formatter call share a single nonce.
+        nonces_seen = {m[len("[BEGIN-DATA:"):-1] for m in begins}
+        assert len(nonces_seen) == 1, (
+            f"expected single per-call nonce, got {nonces_seen}"
+        )
+
+    def test_two_separate_format_calls_use_distinct_nonces(self):
+        """Each formatter call generates a fresh nonce. Without this an
+        attacker observing one request's nonce could plant matching
+        sentinel text for the next request to escape its boundary.
+        """
+        import re
+
+        chunks = [
+            SyllabusChunk(
+                chunk_id="DOC001", course_id="CS101",
+                content="data structures intro",
+                score=0.9,
+            ),
+        ]
+        out_a = _format_typed_result(chunks)
+        out_b = _format_typed_result(chunks)
+        nonce_a = re.search(r"\[BEGIN-DATA:([0-9a-f]+)\]", out_a).group(1)
+        nonce_b = re.search(r"\[BEGIN-DATA:([0-9a-f]+)\]", out_b).group(1)
+        assert nonce_a != nonce_b
+
     def test_format_empty_list(self):
         assert "No results" in _format_typed_result([])

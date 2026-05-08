@@ -8,6 +8,24 @@ delta for non-trivial edits.
 
 ---
 
+## 2026-05-08 — Phase 8.1: Indirect-injection content isolation (spotlighting)
+
+| Prompt | Change | Reason |
+|---|---|---|
+| `query_agent` | 1.0.0 → 1.1.0 | Added "Untrusted retrieved content" disclosure section. The Query Agent receives RAG-retrieved syllabus chunks (and surfaces them in conversation_history); without this disclosure a future LLM consumer can't distinguish retrieved data from instructions. |
+| `planning_agent` | 1.0.0 → 1.1.0 | Same disclosure added. Reasoning steps may consume `step_outputs` from upstream `syllabus_rag` query steps — without this, a planted directive in retrieved content could hijack plan shape or step parameters. |
+
+**Architectural defense (Hines et al. 2024 — spotlighting):**
+- New module: `safety/content_isolation.py` — `wrap_untrusted(content, nonce)` produces marker-bounded text; `new_nonce()` makes per-request nonces (cryptographically random, 64 bits).
+- Wire-in: `agents/query_agent.py` formatter wraps every `SyllabusChunk.content` in `[BEGIN-DATA:nonce]` / `[END-DATA:nonce]` before including it in `response_text`.
+- Defense scope: any LLM call that consumes the wrapped content gets the disclosure-driven instruction to treat marker-bounded text as data.
+
+**Eval deltas:**
+- trace_eval_set scores unchanged (12/12) — no current case includes an injected syllabus chunk; defense is forward-looking.
+- TODO Phase 8.2: nonce-aware Prompt Guard heuristic (so Tier 3 also honors markers when scanning conversation_history) + dedicated indirect-injection eval case.
+
+---
+
 ## 2026-05-07 — Phase 7: Tier 3 architecture swap (intent_analyzer retired)
 
 | Prompt | Change | Reason |
