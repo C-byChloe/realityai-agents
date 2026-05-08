@@ -1,7 +1,7 @@
 # Outer Safety Smoke Eval — Baseline
 
-**Generated:** 2026-05-08T00:39:12.083165+00:00
-**Git SHA:** 6b298e2
+**Generated:** 2026-05-08T00:55:07.752205+00:00
+**Git SHA:** 9674d24
 **Cases:** 10
 **Avg total latency:** 0.0 ms
 

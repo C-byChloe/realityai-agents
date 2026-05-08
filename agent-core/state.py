@@ -9,6 +9,7 @@ from typing_extensions import TypedDict
 from preprocessing.schemas import RewrittenQuery
 from safety.inner.schemas import InnerSafetyResult
 from safety.outer.schemas import OuterSafetyResult
+from safety.output_filter import OutputFilterResult
 from schemas.plan import PlanStep
 
 
@@ -88,6 +89,12 @@ class AgentState(TypedDict, total=False):
 
     # Response
     response: str
+
+    # Output filter (Phase 8.2 — defense-in-depth scrub of LLM-generated
+    # responses before they reach the user). Populated by the
+    # `output_filter_node` immediately before END; carries the trace of
+    # any redactions (with hashes only — never the leaked text).
+    output_filter_result: OutputFilterResult | None
 
     # Metadata
     user_id: str

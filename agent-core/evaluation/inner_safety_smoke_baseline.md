@@ -1,7 +1,7 @@
 # Inner Safety Smoke Eval — Baseline
 
-**Generated:** 2026-05-08T00:41:44.640907+00:00
-**Git SHA:** 6b298e2
+**Generated:** 2026-05-08T00:55:07.927411+00:00
+**Git SHA:** 9674d24
 **Cases:** 11
 **Avg total latency:** 0.36 ms
 

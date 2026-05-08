@@ -16,7 +16,12 @@ from preprocessing.coref_resolver import make_coref_resolver_node
 from prompts import load_prompt
 from safety.outer.node import outer_safety_check
 from safety.outer.schemas import SafetyDecision
+from safety.output_filter import filter_response
 from state import AgentState
+
+import logging
+
+_logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # LLM setup
@@ -241,6 +246,50 @@ def _route_after_outer_safety(state: AgentState) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Node: Output Filter (Phase 8.2 — defense-in-depth)
+# ---------------------------------------------------------------------------
+
+async def output_filter_node(state: AgentState) -> dict:
+    """Scrub the final response before it reaches the user.
+
+    Runs `safety.output_filter.filter_response` on `state["response"]`
+    and overwrites it with the redacted version. Findings (hash-only,
+    never leaked text) land on `state["output_filter_result"]` for
+    audit / observability.
+
+    Architectural placement: every path through the graph eventually
+    flows through `response_generation`, so this single chokepoint
+    catches outputs from the allow / reject / hitl-rejected branches
+    uniformly. Tier 1-3 + inner safety + content isolation all defend
+    against bad things HAPPENING; this layer ensures evidence of bad
+    things doesn't surface to the user even if they did.
+    """
+    response = state.get("response", "") or ""
+    if not response:
+        return {}
+
+    result = filter_response(response)
+    update: dict = {"output_filter_result": result}
+
+    if result.redactions_count > 0:
+        # Log per-category counts for dashboards / alerting. The
+        # response itself is overwritten with the redacted version.
+        category_counts: dict[str, int] = {}
+        for f in result.findings:
+            category_counts[f.category.value] = (
+                category_counts.get(f.category.value, 0) + 1
+            )
+        _logger.warning(
+            "output_filter redacted %d match(es): %s",
+            result.redactions_count,
+            category_counts,
+        )
+        update["response"] = result.redacted_text
+
+    return update
+
+
+# ---------------------------------------------------------------------------
 # Graph Construction
 # ---------------------------------------------------------------------------
 
@@ -299,7 +348,13 @@ def build_graph(*, coref_llm=None) -> StateGraph:
     )
     graph.add_edge("reject_node", "response_generation")
     graph.add_edge("execution", "response_generation")
-    graph.add_edge("response_generation", END)
+    # Phase 8.2 — defense-in-depth output filter as the final node.
+    # Every code path funnels through `response_generation`, so a single
+    # output_filter node downstream catches all responses (allow path,
+    # reject path, hitl-rejected path) before they reach the user.
+    graph.add_node("output_filter", output_filter_node)
+    graph.add_edge("response_generation", "output_filter")
+    graph.add_edge("output_filter", END)
 
     return graph
 
